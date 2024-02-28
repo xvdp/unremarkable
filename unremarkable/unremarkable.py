@@ -216,6 +216,18 @@ def ssh_json(json_str: str, name: str, **kwargs) -> str:
     cmd = ['ssh', f'{user}@{host}', cmd]
     return _run_cmd(cmd, check=True, shell=False)
 
+def get_pdf_dims(pdf: str, page: int = 0):
+    with open(pdf, 'rb') as _fi:
+        red = pypdf.PdfReader(_fi)
+        num = len(red.pages)
+        if page is None:
+            height = [p.mediabox.height for p in red.pages]
+            width = [p.mediabox.width for p in red.pages]
+        else:
+            height = red.pages[page % num].mediabox.height
+            width = red.pages[page % num].mediabox.width
+    return width, height
+
 def make_content(pdf):
     """ .content pageCount and sizeInBytes are important
             orientation is useful
@@ -362,6 +374,22 @@ def _run_cmd(cmd, check=True, shell=False, text=True):
         print("An error occurred:", e.stderr)
     return 1
 
+
+def export_rm(rm_file: str, out: str, width: Optional[int] = None, height: Optional[int] = None):
+
+    assert out.endswith(".pdf") or out.endswith(".svg"), f"expected .pdf or .svg output got {out}"
+    
+    kwargs = {}
+    if height is not None:
+        kwargs['height'] = height
+    if width is not None:
+        kwargs['width'] = width
+
+    if out.endswith(".pdf"):
+        rm2pdf(rm_file, out, **kwargs)
+    else:
+        rm2svg(rm_file, out, **kwargs)
+
 ##
 # console entry points
 #
@@ -396,9 +424,9 @@ def export_rm_fun():
     parser = argparse.ArgumentParser(description='rm to pdf converter')
     parser.add_argument('rm_file', type=str, help='v6 .remarkable file')
     parser.add_argument('out', type=str, help='out pdf/sfg')
+    parser.add_argument('width', type=int, nargs='?', default=None, help='export width, optional')
+    parser.add_argument('height', type=int, nargs='?', default=None, help='export height, optional')
     args = parser.parse_args()
-    assert args.out.endswith(".pdf") or args.out.endswith(".svg"), f"expected .pdf or .svg output got {args.out}"
-    if args.out.endswith(".pdf"):
-        rm2pdf(args.rm_file, args.out)
-    else:
-        rm2svg(args.rm_file, args.out)
+
+    export_rm(args.rm_file, args.out, args.width, args.height)
+

@@ -76,17 +76,17 @@ class PageInfo:
         self.ypos_delta = 0
 
 
-def rm2pdf(infile, outfile):
+def rm2pdf(infile, outfile, width=SCREEN_WIDTH, height=SCREEN_HEIGHT):
     if infile.endswith(".rm"):
         tmp_outfile = tempfile.NamedTemporaryFile().name + ".svg"
-        rm2svg(infile, tmp_outfile)
+        rm2svg(infile, tmp_outfile, width, height)
 
     infile = tmp_outfile
     assert infile.endswith(".svg"), f"expected .svg or .rm file got {infile}"
     cairosvg.svg2pdf(url=infile, write_to=outfile)
 
 
-def rm2svg(infile, outfile, debug=0):
+def rm2svg(infile, outfile, debug=0, width=SCREEN_WIDTH, height=SCREEN_HEIGHT):
     # parse the lines (.rm) input file into a series of blocks
     with open(infile, "rb") as infh:
         infile_datastream = io.BufferedReader(infh)
@@ -95,7 +95,10 @@ def rm2svg(infile, outfile, debug=0):
         blocks = list(read_blocks(infile_datastream))
 
     # get page info
-    page_info = get_page_info(blocks, debug)
+    page_info = get_page_info(blocks, debug, width, height)
+
+    print("height", page_info.height)
+    print("width", page_info.width)
 
     with open(outfile, "w", encoding='utf8') as output:
         # add svg header
@@ -336,7 +339,7 @@ def get_limits_rtb(block, page_info, debug):
     return xmin, xmax, ymin, ymax
 
 
-def get_dimensions(blocks, page_info, debug):
+def get_dimensions(blocks, page_info, debug, width=SCREEN_WIDTH, height=SCREEN_HEIGHT):
     # get block limits
     xmin, xmax, ymin, ymax = get_limits(blocks, page_info, debug)
     if debug > 2:
@@ -356,7 +359,7 @@ def get_dimensions(blocks, page_info, debug):
     width = int(
         math.ceil(
             max(
-                SCREEN_WIDTH,
+                width,
                 xmax - xmin if xmin is not None and xmax is not None else 0,
             )
         )
@@ -364,7 +367,7 @@ def get_dimensions(blocks, page_info, debug):
     height = int(
         math.ceil(
             max(
-                SCREEN_HEIGHT,
+                height,
                 ymax - ymin if ymin is not None and ymax is not None else 0,
             )
         )
@@ -381,7 +384,7 @@ def get_dimensions(blocks, page_info, debug):
 # in a dictionary.
 # Note that both the STB and the SGIB objects seem to do the same mappings.
 # We will keep both.
-def get_page_info(blocks, debug):
+def get_page_info(blocks, debug, width=SCREEN_WIDTH, height=SCREEN_HEIGHT):
     page_info = PageInfo()
     # parse the TNB/STB/SGIB blocks to get the page tree
     for block in blocks:
@@ -400,6 +403,6 @@ def get_page_info(blocks, debug):
         page_info.width,
         page_info.xpos_delta,
         page_info.ypos_delta,
-    ) = get_dimensions(blocks, page_info, debug)
+    ) = get_dimensions(blocks, page_info, debug, width, height)
 
     return page_info

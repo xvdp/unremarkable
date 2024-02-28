@@ -58,3 +58,5 @@ remarkable_export_rm <filname.rm> <outfile.svg or outfile.pdf>
 # TODO
 - [ ] Tests
 - [ ] Validate on MacOS
+- [ ] remarkable_export_rm - fix width and height, they arent the same as the pdf.
+- [ ] remarkable_export_rm - export layerd pdf combining uuid.pdf, uuid.content, uuid/(pagesuuid.rm,)
