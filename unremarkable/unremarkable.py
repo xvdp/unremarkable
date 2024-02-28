@@ -18,6 +18,7 @@ import subprocess as sp
 import uuid
 import json
 import pypdf
+import pprint
 
 
 ##
@@ -286,6 +287,52 @@ def backup_tablet(folder: str = ".", **kwargs):
     return _run_cmd(cmd, check=True, shell=False)
 
 ##
+# build visible name graph from backup
+#
+def build_uuid_graph(node_name, kinship):
+    """ recursively build uuid graph
+    """
+    if node_name not in kinship or not kinship[node_name]:
+        return node_name
+    return {name: build_uuid_graph(name, kinship) for name in kinship[node_name]}
+
+def build_name_graph(uidgraph, folder, graph):
+    """ convert uuid graph to name graph
+    """
+    for key, value in uidgraph.items():
+        with open(osp.join(folder, f"{key}.metadata"), 'r', encoding='utf8') as fi:
+            x = json.load(fi)
+            if isinstance(value, str):
+                graph[x['visibleName']] = key
+            else:
+                graph[x['visibleName']] = {'uuid': key}
+                build_name_graph(value, folder, graph[x['visibleName']])
+
+def build_file_graph(folder: str) -> dict:
+    """ builds uuid and name graph from local reMarkable backup
+    """
+    kinship = {}
+    files = [f.path for f in os.scandir(folder) if f.name.endswith('.metadata')]
+    assert files, f"no .metadata files found in {folder}, pass valid remarkable backup folder"
+    for file in files:
+        with open(file, 'r', encoding='utf8') as fi:
+            x = json.load(fi)
+        parent = x["parent"]
+        name = osp.basename(osp.splitext(file)[0])
+        if parent not in kinship:
+            kinship[parent] = set()
+        kinship[parent].add(name)
+
+    # Second Pass: Build graph starting from root nodes (nodes with parent '')
+    root_nodes = kinship.pop('', None)
+    uidgraph = {node: build_uuid_graph(node, kinship) for node in root_nodes}
+
+    # convert to Name graph
+    graph = {}
+    build_name_graph(uidgraph, folder, graph)
+    return graph
+
+##
 # miscelaneous
 #
 def replace_pdf(pdf, visible_name, **kwargs):
@@ -335,3 +382,11 @@ def pdf_to_remarkable_fun():
     # Parse arguments
     args = parser.parse_args()
     upload_pdf(args.pdf, args.parent, args.name)
+
+def print_file_graph_fun():
+    """console entry point to print remarkable backup file graph"""
+    parser = argparse.ArgumentParser(description='Upload pdf')
+    parser.add_argument('folder', type=str, help='folder with remarkable backup')
+    args = parser.parse_args()
+    graph = build_file_graph(args.folder)
+    pprint.pprint(graph)

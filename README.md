@@ -33,12 +33,20 @@ pdf_to_remarkable and backup_remarkable
 
 # Use
 ```bash
+#!/bin/bash
 # upload pdf file
-pdf_to_remarkable <somefile.pdf> [<remarkable_folder_name>] [<rename>]
-# if no folder or inexistent folder is passed, file will be uploaded to myFiles
-# xochitl.service should restart automatically for files to be shown, if not
-# either ssh root@10.11.99.1 systemctl restart xochitl.service or reboot the remarkable
+pdf_to_remarkable <somefile.pdf> [<remarkable_visible_name>] [<rename>]
+# optional args:
+#   remarkable_visible_name: if no folder or inexistent folder is passed, file will be uploaded to myFiles
+#   rename: if not passed uses prettyfied filename ( no ext, .replace('_',' '))
+# xochitl.service should restart and show new files, if not reboot the reMarkable
 
-# backup remarkable tablet to folder [default '.']
+# backup reMarkable tablet to folder [default '.']
 backup_remarkable [<existing_local_folder>]
- ```
+
+# print reMarkable visible name file graph on local backup
+remarkable_file_graph [<local folder with bakup>]
+# Example: print uuid of file with visible name "God of Carnage" in local folder
+remarkable_file_graph . | grep "God of Carnage"
+#         'God of Carnage': '1e6d7bc7-6893-436c-b1e6-99925097cf92',
+```
