@@ -1,8 +1,11 @@
 """
-uploads pdfs to 
+uploads pdfs to reMarkable tablet
+ENTRY POINTS:
+
+$ pdf_to_remarkable path/to/file.pdf ["remarkable folder name"] ["file visible name"]
+$ backup_remarkable [path/to/backup/folder]
 
 TODO:
-* backup
 * export folder structure tuple dicts folder:{uuid:uuid, name:uuid, ..., subfolder:{}}
 * test: inverse functions: get_uuid_from_name(name) -> get_folder_name(id), ensure it is folder
 * test: after uploading pdf, content, metadata, check that they are there.
@@ -16,6 +19,10 @@ import uuid
 import json
 import pypdf
 
+
+##
+# config
+#
 def get_host_user_path(host: str = '10.11.99.1',
                        user: str = 'root',
                        path: str = '.local/share/remarkable/xochitl') -> tuple:
@@ -23,13 +30,17 @@ def get_host_user_path(host: str = '10.11.99.1',
     Args
         host    (str ['10.11.99.1']) change if running thru wifi
         user    (str ['root']) remarkable default
-        path    (str [ '.local/share/remarkable/xochitl])) remarkable default
+        path    (str [ '.local/share/remarkable/xochitl'])) remarkable default
     """
     return host, user, path
 
 def _kwargs_get(items=('host', 'user', 'path'), **kwargs):
     return {k:v for k,v in kwargs.items() if k in items}
 
+
+##
+# Main upload process
+#
 def upload_pdf(pdf: str,
                folder: str = "",
                visible_name: Optional[str] = None,
@@ -49,33 +60,42 @@ def upload_pdf(pdf: str,
         user    (str ['root']) remarkable default
         path    (str [ '.local/share/remarkable/xochitl])) remarkable default
     """
+    # todo also allow epub
     assert osp.isfile(pdf) and pdf.lower().endswith(".pdf"), f"pdf expected {pdf}, not found"
     _kw = _kwargs_get(**kwargs)
     host, user, path = get_host_user_path(**_kw)
+
+    # generate new file name uuid
     uuids = list_remote(**_kw)
     uid = gen_uuid(uuids)
 
+    # find uuid of folder, if not found use MyFiles
     uuidfolder = folder
     if folder:
-        uuidfolder = get_uuid_from_name(folder, **_kw)
-        if uuidfolder is None:
-            uuidfolder = ""
+        uuidfolder = get_uuid_from_name(folder,  target_type = "CollectionType", **_kw)
+        uuidfolder = uuidfolder or ""
+        if uuidfolder == "":
             print(f"folder <{folder}> not found, uploading to 'MyFiles'")
 
+    # image visible name from pdf name
     if visible_name is None:
         visible_name = osp.basename(osp.splitext(pdf)[0])
         visible_name = visible_name.replace('_', ' ')
+
     # create .content and .metadata files
     content = make_content(pdf)
     metadata = make_metadata(pdf, visible_name, uuidfolder)
 
+    # uploads uuid fullname
     name = osp.join(path, uid)
-
+    # upload pdf and if success, write json files
     print(f"Uploading pdf\n\t{osp.basename(pdf)}\n\t as '{folder}/{visible_name}'\n\t uuid {uid}")
     ret = _rsync_pdf(pdf, name, **_kw)
     if not ret:
         ssh_json(content, f"{name}.content", **_kw)
         ssh_json(metadata, f"{name}.metadata", **_kw)
+
+    # check files were uploaded
     uploads = [f for f in list_remote(None, keep_ext=True, **_kw) if uid in f]
     if uploads:
         uploads = '\n\t'.join(uploads)
@@ -83,42 +103,30 @@ def upload_pdf(pdf: str,
     else:
         print("no files uploaded")
 
+    # rescan the folder structure
     if restart:
         _restart_xochitl(**kwargs)
 
 def _restart_xochitl(**kwargs):
+    """ serivce is restarted on reboot
+    """
     host, user, _ = get_host_user_path(**_kwargs_get(**kwargs))
     cmd = ['ssh', f'{user}@{host}', 'systemctl', 'restart', 'xochitl.service']
-    try:
-        result = sp.run(cmd, check=True, shell=False, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
-        print("rsync output:", result.stdout)
-        _err = result.stderr
-        if _err:
-            print("Error output!!", result.stderr)
-        return 0
-    except sp.CalledProcessError as e:
-        print("An error occurred:", e.stderr)
-    return 1
+    return _run_cmd(cmd, check=True, shell=False)
+
 
 def _rsync_pdf(pdf: str,
                name: str,
                **kwargs):
+    """ functional for main pdf upload"""
     host, user, _ = get_host_user_path(**_kwargs_get(**kwargs))
     name = f'{name}.pdf'
     cmd = ['rsync',
            '-avzhP',   # archive, verbose, compress, human-readable, partial, progress
            '--update',  # Skip files that are newer on the receiver
            pdf, f'{user}@{host}:{name}']
-    try:
-        result = sp.run(cmd, check=True, shell=False, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
-        print("rsync output:", result.stdout)
-        _err = result.stderr
-        if _err:
-            print("Error output!!", result.stderr)
-        return 0
-    except sp.CalledProcessError as e:
-        print("An error occurred:", e.stderr)
-    return 1
+    return _run_cmd(cmd, check=True, shell=False)
+
 
 def get_pdfs(folder: str, key: Optional[str] = None) -> list:
     """ get pdfs from local folder
@@ -136,7 +144,7 @@ def gen_uuid(uuids=()):
     return uid
 
 def list_remote(ext: Optional[str] = '.pdf', **kwargs) -> Optional[list]:
-    """ return basenames of existing files
+    """ return basenames of existing pdf files in reMarkable
     """
     keep_ext = kwargs.get('keep_ext', False)
     host, user, path = get_host_user_path(**_kwargs_get(**kwargs))
@@ -161,10 +169,8 @@ def list_remote(ext: Optional[str] = '.pdf', **kwargs) -> Optional[list]:
     return out
 
 
-def get_uuid_from_name(name: str,
-                       target_type = "CollectionType",
-                       **kwargs) -> Optional[str]:
-    """ returns uuid from a folder visibleName
+def get_uuid_from_name(name: str, target_type = "CollectionType", **kwargs) -> Optional[str]:
+    """ returns uuid from a folder or file visibleName
     Args:
         name    (str) visible name in remarkable
         target_type (str [ CollectionType]) | DocumentType
@@ -186,6 +192,7 @@ def get_uuid_from_name(name: str,
     done
     '''
     cmd = ['ssh', f'{user}@{host}', cmd]
+
     # Execute the SSH command
     out = None
     try:
@@ -196,24 +203,17 @@ def get_uuid_from_name(name: str,
         pass
     return out
 
-
+##
+# .metadata and .content,  necessary files to view pdf in reMarkable
+#
 def ssh_json(json_str: str, name: str, **kwargs) -> str:
-    """ upload a json string to ssh, defaults to remarkable defaults
+    """ write json string to ssh
     """
     host, user, _ = get_host_user_path(**_kwargs_get(**kwargs))
     cmd = f'echo {json.dumps(json_str)} > {name}'
     # Construct the full SSH command as a list
     cmd = ['ssh', f'{user}@{host}', cmd]
-    # Execute the SSH command without using shell=True
-    try:
-        result = sp.run(cmd, check=True, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
-        if result.stderr:
-            print("Error:", result.stderr)
-        else:
-            print(f"> {name} created")
-    except sp.CalledProcessError as e:
-        print("SSH command failed:", e)
-
+    return _run_cmd(cmd, check=True, shell=False)
 
 def make_content(pdf):
     """ .content pageCount and sizeInBytes are important
@@ -269,6 +269,9 @@ def make_metadata(pdf, name, parent=""):
     }
     return json.dumps(metadata)
 
+##
+# rsync backup of ./local/share/remarkable/xochitl
+#
 def backup_tablet(folder: str = ".", **kwargs):
     """ backup script
     """
@@ -277,21 +280,42 @@ def backup_tablet(folder: str = ".", **kwargs):
     host, user, path = get_host_user_path(**_kwargs_get(**kwargs))
 
     cmd = ['rsync',
-           '-avzhrP',   # archive, verbose, compress, human-readable, recursivek partial, progress
+           '-avzhrP',   # archive, verbose, compress, human-readable, recursive partial, progress
            '--update',  # Skip files that are newer on the receiver
            f'{user}@{host}:{path}', folder]
+    return _run_cmd(cmd, check=True, shell=False)
+
+##
+# miscelaneous
+#
+def replace_pdf(pdf, visible_name, **kwargs):
+    """
+    replaces pdf in remarkable with local pdf
+    TODO: fix number of pages, file size.
+    TODO: how do i insert a missing page. shift the content
+    """
+    uidname = get_uuid_from_name(visible_name, "DocumentType", **kwargs)
+    host, user, path = get_host_user_path(**_kwargs_get(**kwargs))
+
+    cmd = ['rsync', '-avz', pdf, f'{user}@{host}:{osp.join(path, uidname)}']
+    return _run_cmd(cmd, check=True, shell=False)
+
+
+def _run_cmd(cmd, check=True, shell=False, text=True):
+    """ TODO replace other functions sp.run, test and validate
+    """
     try:
-        result = sp.run(cmd, check=True, shell=False, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
+        result = sp.run(cmd, check=check, shell=shell, stdout=sp.PIPE, stderr=sp.PIPE, text=text)
         print("rsync output:", result.stdout)
         _err = result.stderr
         if _err:
-            print("Error output!!", result.stderr)
+            print("Error output!!", _err)
         return 0
     except sp.CalledProcessError as e:
         print("An error occurred:", e.stderr)
     return 1
 
-#
+##
 # console entry points
 #
 def backup_remarkable_fun():
