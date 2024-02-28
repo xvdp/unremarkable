@@ -4,7 +4,7 @@ I wrote these code snippets in order to use the reMarkable tablet similar to its
 
 Works with tablet
 * `Settings > General > Software > Version 3.5.2.1807`
-* `hostnamectl`  Operating System: Codex Linux 3.1.266-2 (dunfell) Kernel: Linux 5.4.70-v1.3.4-rm11x
+* `hostnamectl  Operating System: Codex Linux 3.1.266-2 (dunfell) Kernel: Linux 5.4.70-v1.3.4-rm11x`
 
 Before v 3.5 reMarkable could upload files by drag and drop to a browser pointed to the tablet ip `10.11.99.1`. That was deprecated in favour of an app - which annoyed me as going against the rules of opensource. Requests to reinstate that were denied by reMarkable.
 
@@ -45,8 +45,13 @@ pdf_to_remarkable <somefile.pdf> [<remarkable_visible_name>] [<rename>]
 backup_remarkable [<existing_local_folder>]
 
 # print reMarkable visible name file graph on local backup
-remarkable_file_graph [<local folder with bakup>]
+remarkable_file_graph [<local_backup_folder>]
 # Example: print uuid of file with visible name "God of Carnage" in local folder
 remarkable_file_graph . | grep "God of Carnage"
 #         'God of Carnage': '1e6d7bc7-6893-436c-b1e6-99925097cf92',
 ```
+
+# TODO
+- [ ] Tests
+- [ ] Validate on MacOS
+- [ ] Add rm support, look at https://github.com/reHackable/maxio/blob/master/tools/rM2svg
