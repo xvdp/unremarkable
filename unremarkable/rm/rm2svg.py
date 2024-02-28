@@ -82,8 +82,8 @@ def rm2pdf(infile, outfile):
         rm2svg(infile, tmp_outfile)
 
     infile = tmp_outfile
-    assert infile.endswith(".svg"), f"expected .svg or .rm file got {infile}" 
-    cairosvg.svg2pdf(url=outfile, write_to="rm2.pdf")
+    assert infile.endswith(".svg"), f"expected .svg or .rm file got {infile}"
+    cairosvg.svg2pdf(url=infile, write_to=outfile)
 
 
 def rm2svg(infile, outfile, debug=0):

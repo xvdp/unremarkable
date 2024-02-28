@@ -397,7 +397,7 @@ def export_rm_fun():
     parser.add_argument('rm_file', type=str, help='v6 .remarkable file')
     parser.add_argument('out', type=str, help='out pdf/sfg')
     args = parser.parse_args()
-    assert args.out.endswith(".pdf") or args.out.endswith(".svd"), f"expected .pdf or .svg output got {args.out}"
+    assert args.out.endswith(".pdf") or args.out.endswith(".svg"), f"expected .pdf or .svg output got {args.out}"
     if args.out.endswith(".pdf"):
         rm2pdf(args.rm_file, args.out)
     else:
