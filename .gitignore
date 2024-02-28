@@ -2,3 +2,4 @@ build/
 sandbox*
 *.egg-info/
 version.py
+__pycache__/

@@ -17,9 +17,9 @@ import os.path as osp
 import subprocess as sp
 import uuid
 import json
-import pypdf
 import pprint
-
+import pypdf
+from .rm import rm2svg, rm2pdf
 
 ##
 # config
@@ -390,3 +390,15 @@ def print_file_graph_fun():
     args = parser.parse_args()
     graph = build_file_graph(args.folder)
     pprint.pprint(graph)
+
+def export_rm_fun():
+    """console entry point to convert .rm file to pdf or sfg"""
+    parser = argparse.ArgumentParser(description='rm to pdf converter')
+    parser.add_argument('rm_file', type=str, help='v6 .remarkable file')
+    parser.add_argument('out', type=str, help='out pdf/sfg')
+    args = parser.parse_args()
+    assert args.out.endswith(".pdf") or args.out.endswith(".svd"), f"expected .pdf or .svg output got {args.out}"
+    if args.out.endswith(".pdf"):
+        rm2pdf(args.rm_file, args.out)
+    else:
+        rm2svg(args.rm_file, args.out)

@@ -26,8 +26,9 @@ setup(
     entry_points={
         'console_scripts': [
             'pdf_to_remarkable=unremarkable.unremarkable:pdf_to_remarkable_fun',
-            'backup_remarkable=unremarkable.unremarkable:backup_remarkable_fun',
+            'remarkable_backup=unremarkable.unremarkable:backup_remarkable_fun',
             'remarkable_file_graph=unremarkable.unremarkable:print_file_graph_fun',
+            'remarkable_backup=unremarkable.unremarkable:export_rm_fun'
         ],
     },
     python_requires='>=3.6',

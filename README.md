@@ -20,8 +20,9 @@ In order for uploads to be visible by the UI they need at least two companion js
 * `<some_uuid>.metadata` # at least containing `pageCount` and `sizeInBytes`. Without `pageCount` the UI shows a single blank page.
 * `<some_uuid>.content` # at least containing `visibleName` & `parent`
 
+There are other json files as well under that uuid but they are created by the tablet.
 
-There are other json files as well under that uuid but they are created by
+Added remarkable_export_rm - adapted from https://github.com/chemag/rmscene
 
 # Install
 1. install openssh-server in linux or openssh in Mac
@@ -29,7 +30,7 @@ There are other json files as well under that uuid but they are created by
 3. cd unremarkable && pip install .
 
 Installation creates two console entry points:
-pdf_to_remarkable and backup_remarkable
+pdf_to_remarkable, remarkable_backup, remarkable_file_graph, remarkable_export_rm
 
 # Use
 ```bash
@@ -42,16 +43,18 @@ pdf_to_remarkable <somefile.pdf> [<remarkable_visible_name>] [<rename>]
 # xochitl.service should restart and show new files, if not reboot the reMarkable
 
 # backup reMarkable tablet to folder [default '.']
-backup_remarkable [<existing_local_folder>]
+remarkable_backup [<existing_local_folder>]
 
 # print reMarkable visible name file graph on local backup
 remarkable_file_graph [<local_backup_folder>]
 # Example: print uuid of file with visible name "God of Carnage" in local folder
 remarkable_file_graph . | grep "God of Carnage"
 #         'God of Carnage': '1e6d7bc7-6893-436c-b1e6-99925097cf92',
+
+#svg or pdf export
+remarkable_export_rm <filname.rm> <outfile.svg or outfile.pdf>
 ```
 
 # TODO
 - [ ] Tests
 - [ ] Validate on MacOS
-- [ ] Add rm support, look at https://github.com/reHackable/maxio/blob/master/tools/rM2svg
