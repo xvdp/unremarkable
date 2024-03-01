@@ -633,7 +633,7 @@ def pdf_to_remarkable():
     args = parser.parse_args()
     upload_pdf(args.pdf, args.parent, args.name)
 
-def remarkable_file_graph():
+def remarkable_ls():
     """console entry point to print remarkable file graph from local backup
     Args
         folder  (str) xochitl folder containing reMarkable file hierarchy
@@ -644,7 +644,7 @@ def remarkable_file_graph():
     args = parser.parse_args()
     graph = build_file_graph(args.folder)
     if graph is None:
-        help(remarkable_file_graph)
+        help(remarkable_ls)
     else:
         pprint.pprint(graph)
 

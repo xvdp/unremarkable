@@ -64,9 +64,9 @@ remarkable_backup [<local_folder>]
 ```bash
 #!/bin/bash
 # print reMarkable visible_name file graph on local backup
-remarkable_file_graph [<local_folder>] # default [.]
+remarkable_ls [<local_folder>] # default [.]
 # Example: print uuid of file with visible name "God of Carnage" in local folder
-remarkable_file_graph . | grep "God of Carnage"
+remarkable_ls . | grep "God of Carnage"
 #         'God of Carnage': '1e6d7bc7-6893-436c-b1e6-99925097cf92',
 
 remarkable_export_annotated <uuid.pdf> [<name.pdf>]

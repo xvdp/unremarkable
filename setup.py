@@ -28,8 +28,7 @@ setup(
             'pdf_info=unremarkable.unremarkable:pdf_info',  # . local pdf info: num pages, width, height
             'pdf_to_remarkable=unremarkable.unremarkable:pdf_to_remarkable',    # -> upload pdf to remarkable
             'remarkable_backup=unremarkable.unremarkable:remarkable_backup',    # <- backup to local
-            'remarkable_file_graph=unremarkable.unremarkable:remarkable_file_graph', # deprecate
-            'remarkable_ls=unremarkable.unremarkable:remarkable_file_graph', # . list files on backup
+            'remarkable_ls=unremarkable.unremarkable:remarkable_ls', # . list files on backup
             'remarkable_export_annotated=unremarkable.unremarkable:remarkable_export_annotated', # . wip scales are wrong
             # 'remarkable_export_rm=unremarkable.unremarkable:remarkable_export_rm', # . wip s
 
