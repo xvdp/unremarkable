@@ -47,7 +47,7 @@ class DataStream:
         """
         header = self.read_bytes(len(HEADER_V6))
         if header != HEADER_V6:
-            raise ValueError(f"Wrong header: {header}")
+            raise ValueError(f"Unsupported annotation header: {header}")
 
     def write_header(self) -> None:
         """Write the file header.
@@ -94,13 +94,8 @@ class DataStream:
         if tag_type != expected_type:
             self.data.seek(pos)  # Go back
             raise UnexpectedBlockError(
-                "Expected tag type %s (0x%X), got 0x%X at position %d"
-                % (
-                    expected_type.name,
-                    expected_type.value,
-                    tag_type,
-                    self.data.tell(),
-                )
+                f"Expected tag type {expected_type.name}(0x{expected_type.value}), \
+                    got 0x{tag_type} at position {self.data.tell()}"
             )
 
         return index, tag_type
@@ -119,9 +114,7 @@ class DataStream:
         try:
             tag_type = TagType(tag_type)
         except ValueError as e:
-            raise ValueError(
-                "Bad tag type 0x%X at position %d" % (tag_type, self.data.tell())
-            )
+            raise ValueError(f"Bad tag type 0x{tag_type} at position {self.data.tell()}")
 
         return index, tag_type
 
@@ -182,7 +175,7 @@ class DataStream:
             i = ord(self.read_bytes(1))
             result |= (i & 0x7F) << shift
             shift += 7
-            if not (i & 0x80):
+            if not i & 0x80:
                 break
         return result
 

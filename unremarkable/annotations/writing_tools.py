@@ -2,6 +2,8 @@
 
 Code originally from https://github.com/lschwetlick/maxio through
 https://github.com/chemag/maxio .
+
+TODO thicknesses appear tob e incorrect
 """
 
 import logging

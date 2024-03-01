@@ -4,6 +4,7 @@ Based on my investigation of the format with lots of help from ddvk's v6 reader
 code.
 
 @xvdp removed KW_ONLY from dataclasses to make compatible with python 3.9
+used all args as kwargs only
 """
 
 from __future__ import annotations
