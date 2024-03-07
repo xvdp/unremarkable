@@ -43,32 +43,26 @@ There are other json files as well under that uuid but they are created by the t
 Installation creates console entry points.
 
 # Use
-### local .pdf to reMarkable upload
-```bash
-#!/bin/bash
-pdf_to_remarkable <somefile.pdf> [<remarkable_visible_name>] [<rename>] # upload pdf file
-# optional args:
-#   remarkable_visible_name: if no folder or inexistent folder is passed, file will be uploaded to myFiles
-#   rename: if not passed uses prettyfied filename ( no ext, .replace('_',' '))
-# xochitl.service should restart and show new files, if not reboot the reMarkable
-```
-### reMarkable to local backup
-```bash
-#!/bin/bash
-remarkable_backup [<local_folder>]
-#   local_folder arg optional, default '.', if passed, it must exist
-# backup is done with incremental rsync -avzhP --update
-    # archive, verbose, compress, human-readable, partial, progress, newer files only
-```
-### local backed up reMarkable, info, export annotations and merged pdf
-```bash
-#!/bin/bash
-# print reMarkable visible_name file graph on local backup
-remarkable_ls [<local_folder>] # default [.]
-# Example: print uuid of file with visible name "God of Carnage" in local folder
-remarkable_ls . | grep "God of Carnage"
-#         'God of Carnage': '1e6d7bc7-6893-436c-b1e6-99925097cf92',
 
+### info
+``` bash
+remarkable_help
+```
+
+### upload: local .pdf to reMarkable
+```bash
+#!/bin/bash
+pdf_to_remarkable <localfile.pdf|*> [parent folder name] --name <visible name> --no_restart
+# Args
+#   <local pdf str | *>  existingfile or * 
+# Optional args
+#   <parent str>        name of remarkable parent folder, must exist if passed, default -> "" -> MyFiles
+# Optional kwargs
+#   --name  <str>       visible name of pdf on remarmable, default to pdf name with no extension
+#   --no_restart        by default upload restarts xochitl service to show pdf on file list   
+```
+### download: export merged .pdf and .rm annotations; rm v6 files only
+``` bash
 remarkable_export_annotated <uuid.pdf> [<name.pdf>]
 # exports annotated pdf, input pdf has to be in remarkable format uuid.pdf accompanied by uuid/ with annotation.rm files
 # optional arg name.pdf, if not passed uses visible_name.replace(" ", "_")+"_merged.pdf"
@@ -76,7 +70,25 @@ remarkable_export_annotated <uuid.pdf> [<name.pdf>]
 # Only version 6 .rm supported
 ```
 
-### local info
+### download: reMarkable to local incremental backup
+```bash
+#!/bin/bash
+remarkable_backup [<local_folder>]
+#   local_folder arg optional, default '.', if passed, it must exist
+# backup is done with incremental rsync -avzhP --update
+    # archive, verbose, compress, human-readable, partial, progress, newer files only
+```
+### info: local backed up reMarkable, info,
+```bash
+#!/bin/bash
+# print reMarkable visible_name file graph on local backup
+remarkable_ls [<local_folder>] # default [.]
+# Example: print uuid of file with visible name "God of Carnage" in local folder
+remarkable_ls . | grep "God of Carnage"
+#         'God of Carnage': '1e6d7bc7-6893-436c-b1e6-99925097cf92',
+```
+
+### info. local pdf num pages, width, height
 ```bash
 #!/bin/bash
 pdf_info <mypdffile.pdf> [page number]

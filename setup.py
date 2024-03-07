@@ -20,17 +20,17 @@ def _requirements():
 
 setup(
     name=_NAME,
-    version=_set_version("0.0.2"),
+    version=_set_version("0.0.3"),
     packages=find_packages(),
     install_requires=_requirements(),
     entry_points={
         'console_scripts': [
-            'pdf_info=unremarkable.unremarkable:pdf_info',  # . local pdf info: num pages, width, height
-            'pdf_to_remarkable=unremarkable.unremarkable:pdf_to_remarkable',    # -> upload pdf to remarkable
-            'remarkable_backup=unremarkable.unremarkable:remarkable_backup',    # <- backup to local
-            'remarkable_ls=unremarkable.unremarkable:remarkable_ls', # . list files on backup
-            'remarkable_export_annotated=unremarkable.unremarkable:remarkable_export_annotated', # . wip scales are wrong
-            # 'remarkable_export_rm=unremarkable.unremarkable:remarkable_export_rm', # . wip s
+            'pdf_info=unremarkable.__main__:pdf_info',  # . local pdf info: num pages, width, height
+            'pdf_to_remarkable=unremarkable.__main__:pdf_to_remarkable',    # -> upload pdf
+            'remarkable_backup=unremarkable.__main__:remarkable_backup',    # <- backup to local
+            'remarkable_ls=unremarkable.__main__:remarkable_ls', # . list files on backup
+            'remarkable_export_annotated=unremarkable.__main__:remarkable_export_annotated',
+            'remarkable_help=unremarkable.__main__:remarkable_help'
 
         ],
     },

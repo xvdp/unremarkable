@@ -10,7 +10,6 @@ TODO:
 * test: inverse functions: get_uuid_from_name(name) -> get_folder_name(id), ensure it is folder
 * test: after uploading pdf, content, metadata, check that they are there.
 """
-import argparse
 from typing import Optional
 import os
 import os.path as osp
@@ -18,7 +17,6 @@ import subprocess as sp
 import tempfile
 import uuid
 import json
-import pprint
 import pypdf
 from .annotations import remarkable_rm_to_svg, remarkable_rm_to_pdf
 
@@ -40,6 +38,15 @@ def _kwargs_get(items=('host', 'user', 'path'), **kwargs):
     return {k:v for k,v in kwargs.items() if k in items}
 
 
+def _is_host_reachable(ip='10.11.99.1', packets=5) -> bool:
+    command = ['ping', '-w', str(packets), ip]
+    try:
+        sp.run(command, stdout=sp.DEVNULL, stderr=sp.DEVNULL, check=True)
+        return True
+    except sp.CalledProcessError:
+        return False
+
+
 ##
 # Main upload process
 #
@@ -54,62 +61,80 @@ def upload_pdf(pdf: str,
             <uuid>.metadata: visibleName, parent (uuid folder), Optional[lastModified]
         locally it creates other files, .pagedata, .local and a folder
     Args
-        pdf     (str) name of valid pdf file to upoad
-        folder  (str ['']) folder visibleName, on tablet, existing only, default "", 
-        visible_name (str [None]) if none, file will be uploaded as pdf basename
+        pdf             (str) name of valid pdf file to upload, or *
+        folder          (str ['']) destination folder name, existing only, default ""
+        visible_name    (str [None]) if none, file will be uploaded as pdf basename
+        restart         (bool [True]) restarts xochitl service to scan folders
     kwargs:
         host    (str ['10.11.99.1']) remarkable usbc port, change if using wifi
         user    (str ['root']) remarkable default
         path    (str [ '.local/share/remarkable/xochitl])) remarkable default
     """
-    # todo also allow epub
-    assert osp.isfile(pdf) and pdf.lower().endswith(".pdf"), f"pdf expected {pdf}, not found"
+    # TODO also allow epub
     _kw = _kwargs_get(**kwargs)
     host, user, path = get_host_user_path(**_kw)
+    if not _is_host_reachable(host, packets=2):
+        print (f"host <{host}> is not reachable")
+        return None
 
-    # generate new file name uuid
-    uuids = list_remote(**_kw)
-    uid = gen_uuid(uuids)
-
-    # find uuid of folder, if not found use MyFiles
-    uuidfolder = folder
-    if folder:
-        uuidfolder = get_uuid_from_name(folder,  target_type = "CollectionType", **_kw)
-        uuidfolder = uuidfolder or ""
-        if uuidfolder == "":
-            print(f"folder <{folder}> not found, uploading to 'MyFiles'")
-
-    # image visible name from pdf name
-    if visible_name is None:
-        visible_name = osp.basename(osp.splitext(pdf)[0])
-        visible_name = visible_name.replace('_', ' ')
-
-    # create .content and .metadata files
-    content = make_content(pdf)
-    metadata = make_metadata(pdf, visible_name, uuidfolder)
-
-    # uploads uuid fullname
-    name = osp.join(path, uid)
-    # upload pdf and if success, write json files
-    print(f"Uploading pdf\n\t{osp.basename(pdf)}\n\t as '{folder}/{visible_name}'\n\t uuid {uid}")
-    ret = _rsync_pdf(pdf, name, **_kw)
-    if not ret:
-        ssh_json(content, f"{name}.content", **_kw)
-        ssh_json(metadata, f"{name}.metadata", **_kw)
-
-    # check files were uploaded
-    uploads = [f for f in list_remote(None, keep_ext=True, **_kw) if uid in f]
-    if uploads:
-        uploads = '\n\t'.join(uploads)
-        print(f"files uploaded \n\t{uploads}")
+    if osp.basename(pdf) == "*":
+        pdfs = [f.path for f in os.scandir(osp.dirname(pdf) or None)
+                if f.name.lower().endswith(".pdf")]
+        if pdfs:
+            print(f"Uploading {len(pdfs)} files to reMarkable")
+            for pdf in pdfs:
+                upload_pdf(pdf, folder, visible_name, False, **kwargs)
+            if restart:
+                _restart_xochitl(**kwargs)
+        else:
+            print(f"No pdfs found in {osp.abspath(osp.expanduser(osp.dirname(pdf)))}")
     else:
-        print("no files uploaded")
 
-    # rescan the folder structure
-    if restart:
-        _restart_xochitl(**kwargs)
+        assert osp.isfile(pdf) and pdf.lower().endswith(".pdf"), f"pdf expected {pdf}, not found"
 
-def _restart_xochitl(**kwargs):
+        # generate new file name uuid
+        uuids = list_remote(**_kw)
+        uid = gen_uuid(uuids)
+
+        # find uuid of folder, if not found use MyFiles
+        uuidfolder = folder
+        if folder:
+            uuidfolder = get_uuid_from_name(folder,  target_type = "CollectionType", **_kw)
+            uuidfolder = uuidfolder or ""
+            if uuidfolder == "":
+                print(f"folder <{folder}> not found, uploading to 'MyFiles'")
+
+        # image visible name from pdf name
+        if visible_name is None:
+            visible_name = osp.basename(osp.splitext(pdf)[0])
+            visible_name = visible_name.replace('_', ' ')
+
+        # create .content and .metadata files
+        content = make_content(pdf)
+        metadata = make_metadata(pdf, visible_name, uuidfolder)
+
+        # uploads uuid fullname
+        name = osp.join(path, uid)
+        # upload pdf and if success, write json files
+        print(f"Uploading\n\t{osp.basename(pdf)}\n\t as '{folder}/{visible_name}'\n\t uuid {uid}")
+        ret = _rsync_pdf(pdf, name, **_kw)
+        if not ret:
+            ssh_json(content, f"{name}.content", **_kw)
+            ssh_json(metadata, f"{name}.metadata", **_kw)
+
+        # check files were uploaded
+        uploads = [f for f in list_remote(None, keep_ext=True, **_kw) if uid in f]
+        if uploads:
+            uploads = '\n\t'.join(uploads)
+            print(f"files uploaded \n\t{uploads}")
+        else:
+            print("no files uploaded")
+
+        # rescan the folder structure
+        if restart:
+            _restart_xochitl(**kwargs)
+
+def _restart_xochitl(**kwargs) -> int:
     """ serivce is restarted on reboot
     """
     host, user, _ = get_host_user_path(**_kwargs_get(**kwargs))
@@ -119,9 +144,13 @@ def _restart_xochitl(**kwargs):
 
 def _rsync_pdf(pdf: str,
                name: str,
-               **kwargs):
+               **kwargs) -> int:
     """ functional for main pdf upload"""
     host, user, _ = get_host_user_path(**_kwargs_get(**kwargs))
+    if not _is_host_reachable(host, packets=2):
+        print (f"host <{host}> is not reachable")
+        return 1
+
     name = f'{name}.pdf'
     cmd = ['rsync',
            '-avzhP',   # archive, verbose, compress, human-readable, partial, progress
@@ -142,6 +171,9 @@ def list_remote(ext: Optional[str] = '.pdf', **kwargs) -> Optional[list]:
     """
     keep_ext = kwargs.get('keep_ext', False)
     host, user, path = get_host_user_path(**_kwargs_get(**kwargs))
+    if not _is_host_reachable(host, packets=2):
+        print (f"host <{host}> is not reachable")
+        return None
     path = path if ext is None else osp.join(path, f"*{ext}")
     # cmd = f'ssh {user}@{host} ls {path}'      # shell=True
     cmd = ['ssh', f'{user}@{host}', 'ls', path] # simple list cmd -> shell=False
@@ -168,6 +200,7 @@ def _is_uuid(name: str):
         return True
     except ValueError:
         return False
+
 
 def get_parent(name: str, folder: str = '.') -> tuple:
     """ return parent to a file, given uuid or name
@@ -252,7 +285,7 @@ def get_uuid_from_name(name: str, target_type = "CollectionType", **kwargs) -> O
 ##
 # .metadata and .content,  necessary files to view pdf in reMarkable
 #
-def ssh_json(json_str: str, name: str, **kwargs) -> str:
+def ssh_json(json_str: str, name: str, **kwargs) -> int:
     """ write json string to ssh
     """
     host, user, _ = get_host_user_path(**_kwargs_get(**kwargs))
@@ -319,10 +352,25 @@ def make_metadata(pdf, name, parent=""):
 ##
 # rsync backup of ./local/share/remarkable/xochitl
 #
-def backup_tablet(folder: str = ".", **kwargs):
+def backup_tablet(folder: str = ".", **kwargs) -> int:
     """ backup script
+    Args
+        folder ['.'] - if /xochitl exists, sync, else, create new xochitl folder
+            if folder == '?' search for existing backup under current tree
     """
+    if folder == "?":
+        folder = _find_folder('xochitl')
+        if folder is None:
+            return None
+
     assert osp.isdir(folder), f"local backup folder '{folder}' not found, nothing done."
+    folder = osp.abspath(osp.expanduser(folder))
+    if osp.basename(folder) == 'xochitl':
+        folder = osp.abspath(osp.expanduser(osp.join(folder, '..')))
+
+    xochitl = osp.join(folder, 'xochitl')
+    if not osp.isdir(xochitl):
+        print(f"Creating new remarkable backup {xochitl}")
 
     host, user, path = get_host_user_path(**_kwargs_get(**kwargs))
 
@@ -356,17 +404,32 @@ def build_name_graph(uidgraph, folder, graph):
                 build_name_graph(value, folder, graph[x['visibleName']])
 
 
-def build_file_graph(folder: str) -> dict:
+def build_file_graph(folder: str) -> Optional[dict]:
     """ builds uuid and name graph from local reMarkable backup
+    Args
+        folder      str local folder must be either be 'xochitl', parent to xochitl or ? to find it
     """
     kinship = {}
-    if not osp.isdir(folder):
+    if folder == "?":
+        folder = _find_folder('xochitl')
+    if not osp.isdir(folder or  ""):
         print(f"folder <{folder}> not found, pass valid folder.")
         return None
+
     files = [f.path for f in os.scandir(folder) if f.name.endswith('.metadata')]
+    if folder == "." and not files:
+        xochitl = osp.join(folder, 'xochitl')
+        if osp.isdir(xochitl):
+            files = [f.path for f in os.scandir(xochitl) if f.name.endswith('.metadata')]
+            if files:
+                folder = xochitl
+
     if not files:
         print(f"no .metadata files found in folder <{folder}> pass valid remarkable backup folder")
         return None
+
+
+    print(f"backup folder: \033[34m {osp.abspath(osp.expanduser(folder))} \033[0m" )
     for file in files:
         with open(file, 'r', encoding='utf8') as fi:
             x = json.load(fi)
@@ -410,21 +473,31 @@ def get_pdfs(folder: str, key: Optional[str] = None) -> list:
         pdfs = [f for f in pdfs if key in f]
     return pdfs
 
+def _find_folder(name: str, root: str = '.') -> Optional[str]:
+    for dirpath, dirnames, _ in os.walk(root):
+        if name in dirnames:
+            return os.path.join(dirpath, name)
+    print(f"No existing folder {name} under {os.getcwd()}, nothing done")
+    return None
 
-def replace_pdf(pdf, visible_name, **kwargs):
+def replace_pdf(pdf, visible_name, **kwargs) -> int:
     """
     replaces pdf in remarkable with local pdf
     TODO: fix number of pages, file size.
     TODO: how do i insert a missing page. shift the content
     """
-    uidname = get_uuid_from_name(visible_name, "DocumentType", **kwargs)
     host, user, path = get_host_user_path(**_kwargs_get(**kwargs))
+    if not _is_host_reachable(host, packets=2):
+        print (f"host <{host}> is not reachable")
+        return 1
+
+    uidname = get_uuid_from_name(visible_name, "DocumentType", **kwargs)
 
     cmd = ['rsync', '-avz', pdf, f'{user}@{host}:{osp.join(path, uidname)}']
     return _run_cmd(cmd, check=True, shell=False)
 
 
-def _run_cmd(cmd, check=True, shell=False, text=True):
+def _run_cmd(cmd, check=True, shell=False, text=True) -> int:
     """ TODO replace other functions sp.run, test and validate
     """
     try:
@@ -602,128 +675,3 @@ def export_merged_pdf(pdf: str,
             pdf_writer.write(fi)
 
     return name
-
-##
-# console entry points
-#
-def remarkable_backup():
-    """console entry point to backup remarkable hierarchy
-    Args
-        folder  (str ['.']) local existing folder to parent xochitl hierarchy
-    backup is done with incremental `rsync -avzhP --update`
-        archive, verbose, compress, human-readable, partial, progress, newer files only
-    """
-    parser = argparse.ArgumentParser(description='Backup tablet')
-    parser.add_argument('folder', type=str, nargs='?', default='.', help='parent of tablet backup')
-    args = parser.parse_args()
-    backup_tablet(args.folder)
-
-def pdf_to_remarkable():
-    """console entry point upload pdf to remarkable
-    Args
-        pdf     (str) valid pdf file
-        parent  (str ['']) visible name of folder to upload pdf to
-        --name  (str [None]) visible name, if None: pdfbasename.replace("_"," ")     
-    """
-    parser = argparse.ArgumentParser(description='Upload pdf')
-    parser.add_argument('pdf', type=str, help='valid .pdf file')
-    parser.add_argument('parent', type=str, nargs='?', default='', help='parent folder')
-    parser.add_argument('--name', type=str, default=None, help='visible name, optional')
-    # Parse arguments
-    args = parser.parse_args()
-    upload_pdf(args.pdf, args.parent, args.name)
-
-def remarkable_ls():
-    """console entry point to print remarkable file graph from local backup
-    Args
-        folder  (str) xochitl folder containing reMarkable file hierarchy
-    """
-    parser = argparse.ArgumentParser(description='print remrkable file graph')
-    parser.add_argument('folder', type=str, nargs='?', default='.',
-                        help='folder with remarkable backup')
-    args = parser.parse_args()
-    graph = build_file_graph(args.folder)
-    if graph is None:
-        help(remarkable_ls)
-    else:
-        pprint.pprint(graph)
-
-def remarkable_export_rm():
-    """console entry point to explort locally stored .rm file to pdf or sfg
-    Args
-        rm_file     (str) remarkable .rm version 6 file
-        out         (str) name.pdf or name.sfg
-        width       (float [None]) scale from screen size to width
-        height      (float [None]) scale from screen size to height
-        # TODO fix best fit on screen space
-    Example
-        $ remarkable_export_rm rmfilename.rm outfile(.svg or .pdf) [width] [height]
-    """
-    parser = argparse.ArgumentParser(description='rm to pdf converter')
-    parser.add_argument('rm_file', type=str, help='v6 .remarkable file')
-    parser.add_argument('out', type=str, help='out pdf/sfg')
-    parser.add_argument('width', type=float, nargs='?', default=None,
-                        help='export width, optional')
-    parser.add_argument('height', type=float, nargs='?', default=None,
-                        help='export height, optional')
-    args = parser.parse_args()
-    if not args.rm_file.endswith('.rm') or args.out.lower()[-4:] not in ('.svg', '.pdf'):
-        help(remarkable_export_rm)
-    else:
-        export_rm(args.rm_file, args.out, args.width, args.height)
-
-def pdf_info():
-    """console entry point to return num pages, and dimensions of a local pdf
-    Args
-        pdf     (str) valid pdf file
-        page    (int [None]) if page, return width and height for page
-    Example
-        $ pdf_info mypdffile.pdf    # all page widths
-            -> {'pages': num_pages, 'width': [widths], 'height': [heights]}
-        $ pdf_info mypdffile.pdf 1 # width of page 1
-            -> {'pages': num_pages, 'width': widths[1], 'height': heights[1]}
-    """
-    parser = argparse.ArgumentParser(description='pdf info utils')
-    parser.add_argument('pdf', type=str, help='pdf file')
-    parser.add_argument('page', type=int, nargs='?', default=None,
-                        help='get dimension of a single page')
-    args = parser.parse_args()
-    if not osp.isfile(args.pdf) or not args.pdf.lower().endswith('.pdf'):
-        print(f"pass valid .pdf file, got <{args.pdf}> isfile: {osp.isfile(args.pdf)}")
-        help(pdf_info)
-    else:
-        print(get_pdf_info(args.pdf, args.page))
-
-def remarkable_export_annotated():
-    """ console entry point merging pdf and annotations
-    Args
-        pdf     (str) pdf file from xochitl hierarchy with
-            uuid.metadata, uuid.content & uuid/*.rm  exported to local backup
-        folder  (str ['.']) output folder
-        name    (str [None]) if None -> visible_name.replace(" ", "_")+".pdf"
-        page    (int [None]) if None export all pages
-        stroke_scale (float [0.6]) svg is improperly scaled atm, rescale
-        annotation_scale (float [1.0]), theres still something wonky with the scaling of the svg
-            pass extra scaling factor if needed
-    """
-    parser = argparse.ArgumentParser(description='perged pdf')
-    parser.add_argument('pdf', type=str, help='pdf file from xochitl hierarchy')
-    parser.add_argument('name', type=str, nargs='?', default=None,
-                        help='name of merged pdf, default: visible_name + "_merged.pdf"')
-    parser.add_argument('folder', type=str, nargs='?', default='.',
-                        help='folder of merged pdf')
-    parser.add_argument('page', type=int, nargs='?', default=None,
-                        help='export only page number')
-    parser.add_argument('stroke_scale', type=float, nargs='?', default=0.6,
-                        help='scale strokes - something wonky in svg export widths ')
-    parser.add_argument('annotation_scale', type=float, nargs='?', default=1.,
-                        help='scale strokes - something wonky in svg export scale ')
-    args = parser.parse_args()
-    _uuid = _is_uuid(osp.splitext(osp.basename(args.pdf))[0])
-    if (not osp.isfile(args.pdf) or not args.pdf.endswith('.pdf') or not _uuid):
-        print(f"pass valid remarkable uuid.pdf file, got <{args.pdf}> \
-              isfile: {osp.isfile(args.pdf)}, is_uuid {_uuid}")
-        help(remarkable_export_annotated)
-    else:
-        export_merged_pdf(args.pdf, args.folder, args.name, args.page, args.stroke_scale,
-                          args.annotation_scale)
