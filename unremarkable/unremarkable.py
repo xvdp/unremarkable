@@ -18,7 +18,7 @@ import tempfile
 import uuid
 import json
 import pypdf
-from .annotations import remarkable_rm_to_svg, remarkable_rm_to_pdf
+from .rmscene import remarkable_rm_to_svg, remarkable_rm_to_pdf
 
 ##
 # config

@@ -8,7 +8,7 @@ import pprint
 
 from .unremarkable import backup_tablet, upload_pdf, build_file_graph, export_rm, get_pdf_info, \
     _is_uuid, export_merged_pdf, _is_host_reachable
-from . import annotations
+from . import rmscene
 
 _A="\033[0m"
 _G="\033[34m"
@@ -114,7 +114,7 @@ def pdf_info():
         print(get_pdf_info(args.pdf, args.page))
 
 def remarkable_export_annotated():
-    """ console entry point merging pdf and annotations
+    """ console entry point merging pdf and rmscene
     Args
         pdf     (str) pdf file from xochitl hierarchy with
             uuid.metadata, uuid.content & uuid/*.rm  exported to local backup
@@ -153,7 +153,7 @@ def remarkable_read_rm():
     parser.add_argument("file", type=argparse.FileType("rb"), help="filename to read")
     args = parser.parse_args()
 
-    result = annotations.read_blocks(args.file)
+    result = rmscene.read_blocks(args.file)
     for el in result:
         print()
         pprint.pprint(el)

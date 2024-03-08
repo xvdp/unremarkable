@@ -1,9 +1,7 @@
 """
 rmscene library from https://github.com/ricklupton/rmscene/
+handles reMarkable v6 rm files
 modified for python >=3.6,<3.10
-
-adapted from https://github.com/chemag/rmscene
-v6 .rm format compatible with python 3.9
 
 using svgcairo instead of inkscape to map to pdf
 """
