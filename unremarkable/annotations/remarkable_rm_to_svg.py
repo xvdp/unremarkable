@@ -86,7 +86,7 @@ def remarkable_rm_to_pdf(infile: str,
                          height: Optional[int] = None,
                          **kwargs) -> str:
     """
-    TODO: overlay is still a bit wonku
+    TODO: overlay is still a bit wonky
     """
     assert osp.splitext(infile)[-1] in (".svg", ".rm"), f"expected .rm/ .svg file got {infile}"
     b_svg, page_width, page_height = remarkable_rm_to_svg(infile, **kwargs)
@@ -94,6 +94,8 @@ def remarkable_rm_to_pdf(infile: str,
     # print(f"svg width {page_width}, svg height {page_height}")
     # TODO consider, height, width and content information
     # something still wonky here
+    print(f"to pdf: height {height} {page_height}")
+    print(f"to pdf: width  {width} {page_width}")
     scale = 1. if height is None else min(height/page_height, width/page_width)
     scale *= kwargs.get('annotation_scale', 1.) # pass fudge factor
 
@@ -125,10 +127,10 @@ def remarkable_rm_to_svg(infile,
     """
     blocks = remarkable_rm_to_blocks(infile)
     page_info = get_page_info(blocks, debug)
-    # print(f"page_info.height {page_info.height}")
-    # print(f"page_info.width {page_info.width}")
-    # print(f"page_info.xpos_delta {page_info.xpos_delta}")
-    # print(f"page_info.ypos_delta {page_info.ypos_delta}")
+    print(f"page_info.height {page_info.height}")
+    print(f"page_info.width {page_info.width}")
+    print(f"page_info.xpos_delta {page_info.xpos_delta}")
+    print(f"page_info.ypos_delta {page_info.ypos_delta}")
     _b = 4*" " # tab
 
     # global _X

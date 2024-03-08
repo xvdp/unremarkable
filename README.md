@@ -16,7 +16,7 @@ I wrote these code snippets in order to use the reMarkable tablet similar to its
 Works with tablet
 * `Settings > General > Software > Version 3.5.2.1807`
 * `hostnamectl  Operating System: Codex Linux 3.1.266-2 (dunfell) Kernel: Linux 5.4.70-v1.3.4-rm11x`
-* `.rm` files version 6 - code adapted from https://github.com/chemag/rmscene
+* `.rm` files version 6 - code adapted from https://github.com/ricklupton/rmscene to run with python 3.9
 
 Before v 3.5 reMarkable could upload files by drag and drop to a browser pointed to the tablet ip `10.11.99.1`. That was deprecated in favour of an app - which annoyed me as going against the rules of opensource. Requests to reinstate that were denied by reMarkable.
 
@@ -86,6 +86,10 @@ remarkable_ls [<local_folder>] # default [.]
 # Example: print uuid of file with visible name "God of Carnage" in local folder
 remarkable_ls . | grep "God of Carnage"
 #         'God of Carnage': '1e6d7bc7-6893-436c-b1e6-99925097cf92',
+
+remarkable_read_rm <.rm annotation file> 
+# Example
+remarkable_read_rm '3bb743f8-15b9-45a5-87a1-1369dff6769c/6bf1e7b6-8c34-4c7e-85d3-ff9b01039cb0.rm'
 ```
 
 ### info. local pdf num pages, width, height
@@ -95,3 +99,4 @@ pdf_info <mypdffile.pdf> [page number]
 # prints {'pages': num_pages, 'width': [widths], 'height': [heights]}
 # if optional arg page is entered returns width and height for single page
 ```
+

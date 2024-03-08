@@ -8,6 +8,7 @@ import pprint
 
 from .unremarkable import backup_tablet, upload_pdf, build_file_graph, export_rm, get_pdf_info, \
     _is_uuid, export_merged_pdf, _is_host_reachable
+from . import annotations
 
 _A="\033[0m"
 _G="\033[34m"
@@ -146,6 +147,16 @@ def remarkable_export_annotated():
         export_merged_pdf(args.pdf, args.folder, args.name, args.page, args.stroke_scale,
                           args.annotation_scale)
 
+def remarkable_read_rm():
+    """console entry point to read rm files v.6"""
+    parser = argparse.ArgumentParser(prog="rmscene")
+    parser.add_argument("file", type=argparse.FileType("rb"), help="filename to read")
+    args = parser.parse_args()
+
+    result = annotations.read_blocks(args.file)
+    for el in result:
+        print()
+        pprint.pprint(el)
 
 def remarkable_help():
     """console entry point for info"""
@@ -189,5 +200,10 @@ def remarkable_help():
         $ {_B}remarkable_export_annotated{_A} <uuid pdf> [name] [folder] [page] [stroke _scale] [annotation_scale]
             WIP: exports an annotated pdf passing the remarkable uuid name.
             TODO: fix scale issues
+
+            
+        $ {_B}remarkable_read_rm{_A} <file.rm>
+            reads and prints rm file
+            - forwarding of github.com/ficklupton/rmscene.__main__ 
     """
     print (_help)

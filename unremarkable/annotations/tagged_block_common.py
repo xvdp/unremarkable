@@ -2,8 +2,6 @@
 
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass
 import enum
 import logging
@@ -28,6 +26,16 @@ class TagType(enum.IntEnum):
 
 class UnexpectedBlockError(Exception):
     """Unexpected tag or index in block stream."""
+
+
+@dataclass(eq=True, order=True, frozen=True)
+class CrdtId:
+    "An identifier or timestamp."
+    part1: int
+    part2: int
+
+    def __repr__(self) -> str:
+        return f"CrdtId({self.part1}, {self.part2})"
 
 
 class DataStream:
@@ -179,6 +187,14 @@ class DataStream:
                 break
         return result
 
+    def read_crdt_id(self) -> CrdtId:
+        # Based on ddvk's reader.go
+        # TODO: should be var unit?
+        part1 = self.read_uint8()
+        part2 = self.read_varuint()
+        # result = (part1 << 48) | part2
+        return CrdtId(part1, part2)
+
     def write_bool(self, value: bool):
         """Write a bool to the data stream."""
         self._write_struct("?", value)
@@ -209,7 +225,7 @@ class DataStream:
             raise ValueError("value is negative")
         b = bytearray()
         while True:
-            to_write = value & 0x7F
+            to_write = value & 0x7F@dataclass(eq=True, order=True, frozen=True)
             value >>= 7
             if value:
                 b.append(to_write | 0x80)
@@ -218,15 +234,16 @@ class DataStream:
                 break
         self.data.write(b)
 
+def write_crdt_id(self, value: CrdtId):
+    """Write a `CrdtId` to the data stream."""
+    # Based on ddvk's reader.go
+    # TODO: should be var unit?
+    if value.part1 >= 2**8 or value.part2 >= 2**64:
+        raise ValueError("CrdtId too large: %s" % value)
+    self.write_uint8(value.part1)
+    self.write_varuint(value.part2)
+    # result = (part1 << 48) | part2
 
-@dataclass(eq=True, order=True, frozen=True)
-class CrdtId:
-    "An identifier or timestamp."
-    part1: int
-    part2: int
-
-    def __repr__(self) -> str:
-        return f"CrdtId({self.part1}, {self.part2})"
 
 
 _T = tp.TypeVar("_T")

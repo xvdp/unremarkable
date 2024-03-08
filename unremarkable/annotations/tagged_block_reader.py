@@ -7,8 +7,6 @@ code.
 used all args as kwargs only
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass#, KW_ONLY
@@ -70,14 +68,20 @@ class TaggedBlockReader:
     def read_id(self, index: int) -> CrdtId:
         """Read a tagged CRDT ID."""
         self.data.read_tag(index, TagType.ID)
-
-        # Based on ddvk's reader.go
-        # TODO: should be var unit?
-        part1 = self.data.read_uint8()
-        part2 = self.data.read_varuint()
-        # result = (part1 << 48) | part2
-        result = CrdtId(part1, part2)
+        result = self.data.read_crdt_id()
         return result
+    
+    # def read_id(self, index: int) -> CrdtId:
+    #     """Read a tagged CRDT ID."""
+    #     self.data.read_tag(index, TagType.ID)
+
+    #     # Based on ddvk's reader.go
+    #     # TODO: should be var unit?
+    #     part1 = self.data.read_uint8()
+    #     part2 = self.data.read_varuint()
+    #     # result = (part1 << 48) | part2
+    #     result = CrdtId(part1, part2)
+    #     return result
 
     def read_bool(self, index: int) -> bool:
         """Read a tagged bool."""
@@ -109,6 +113,50 @@ class TaggedBlockReader:
         self.data.read_tag(index, TagType.Byte8)
         result = self.data.read_float64()
         return result
+
+    ## Read simple values -- optional variants
+
+    def _read_optional(self, func, index, default):
+        try:
+            return func(index)
+        except (UnexpectedBlockError, EOFError):
+            return default
+
+    def read_id_optional(
+        self, index: int, default: tp.Optional[CrdtId] = None
+    ) -> tp.Optional[CrdtId]:
+        """Read a tagged CRDT ID, return `default` if not present."""
+        return self._read_optional(self.read_id, index, default)
+
+    def read_bool_optional(
+        self, index: int, default: tp.Optional[bool] = None
+    ) -> tp.Optional[bool]:
+        """Read a tagged bool, return `default` if not present."""
+        return self._read_optional(self.read_bool, index, default)
+
+    def read_byte_optional(
+        self, index: int, default: tp.Optional[int] = None
+    ) -> tp.Optional[int]:
+        """Read a tagged byte as an unsigned integer, return `default` if not present."""
+        return self._read_optional(self.read_byte, index, default)
+
+    def read_int_optional(
+        self, index: int, default: tp.Optional[int] = None
+    ) -> tp.Optional[int]:
+        """Read a tagged 4-byte unsigned integer, return `default` if not present."""
+        return self._read_optional(self.read_int, index, default)
+
+    def read_float_optional(
+        self, index: int, default: tp.Optional[float] = None
+    ) -> tp.Optional[float]:
+        """Read a tagged 4-byte float, return `default` if not present."""
+        return self._read_optional(self.read_float, index, default)
+
+    def read_double_optional(
+        self, index: int, default: tp.Optional[float] = None
+    ) -> tp.Optional[float]:
+        """Read a tagged 8-byte double, return `default` if not present."""
+        return self._read_optional(self.read_double, index, default)
 
     ## Blocks
 
@@ -259,3 +307,31 @@ class TaggedBlockReader:
             assert string_length + 2 <= block_info.size
             string = self.data.read_bytes(string_length).decode()
             return string
+
+
+    def read_string_with_format(self, index: int) -> tuple[str, tp.Optional[int]]:
+        """Read a string block with formatting."""
+        with self.read_subblock(index) as block_info:
+            string_length = self.data.read_varuint()
+            # XXX not sure if this is right meaning?
+            is_ascii = self.data.read_bool()
+            assert is_ascii == 1
+            assert string_length + 2 <= block_info.size
+            b = self.data.read_bytes(string_length)
+            string = b.decode()
+            if len(b) != len(string):
+                _logger.debug(
+                    "read_string: decoded %r (%d) to %r (%d)",
+                    b,
+                    len(b),
+                    string,
+                    len(string),
+                )
+
+            if self.data.check_tag(2, TagType.Byte4):
+                # We have a format code
+                fmt = self.read_int(2)
+            else:
+                fmt = None
+
+            return string, fmt

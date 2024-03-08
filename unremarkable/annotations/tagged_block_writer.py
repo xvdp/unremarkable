@@ -5,8 +5,6 @@ code.
 
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterator
 from contextlib import contextmanager
 from io import BytesIO
@@ -49,14 +47,7 @@ class TaggedBlockWriter:
     def write_id(self, index: int, value: CrdtId):
         """Write a tagged CRDT ID."""
         self.data.write_tag(index, TagType.ID)
-
-        # Based on ddvk's reader.go
-        # TODO: should be var unit?
-        if value.part1 >= 2**8 or value.part2 >= 2**64:
-            raise ValueError(f"CrdtId too large: {value}")
-        self.data.write_uint8(value.part1)
-        self.data.write_varuint(value.part2)
-        # result = (part1 << 48) | part2
+        self.data.write_crdt_id(value)
 
     def write_bool(self, index: int, value: bool):
         """Write a tagged bool."""
@@ -181,3 +172,14 @@ class TaggedBlockWriter:
             self.data.write_varuint(string_length)
             self.data.write_bool(is_ascii)
             self.data.write_bytes(value.encode())
+
+    def write_string_with_format(self, index: int, text: str, fmt: int):
+        """Write a string block with formatting."""
+        with self.write_subblock(index):
+            b = text.encode()
+            bytes_length = len(b)
+            is_ascii = True  # XXX not sure if this is right meaning?
+            self.data.write_varuint(bytes_length)
+            self.data.write_bool(is_ascii)
+            self.data.write_bytes(b)
+            self.write_int(2, fmt)

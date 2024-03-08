@@ -10,7 +10,7 @@ TODO:
 * test: inverse functions: get_uuid_from_name(name) -> get_folder_name(id), ensure it is folder
 * test: after uploading pdf, content, metadata, check that they are there.
 """
-from typing import Optional
+from typing import Optional, Union
 import os
 import os.path as osp
 import subprocess as sp
@@ -617,6 +617,54 @@ def export_merged_pdf(pdf: str,
             "customZoomPageHeight": 2654,
             "customZoomPageWidth": 1877,
             "customZoomScale": 0.802450168319183,
+
+        "coverPageNumber": 0,
+        "customZoomCenterX": 0,
+        "customZoomCenterY": 936,
+        "customZoomOrientation": "portrait",
+        "customZoomPageHeight": 1872,
+        "customZoomPageWidth": 1404,
+        "customZoomScale": 1,
+
+-- limits: xmin: -964.75 xmax: 964.0001220703125 ymin: 0.06121639162302017 ymax: 2571.68505859375
+to pdf: height 792 2572
+to pdf: width  612 1929
+
+-- limits: xmin: -965.3641967773438 xmax: 935.1143798828125 ymin: 67.4096908569336 ymax: 2571.29248046875
+to pdf: height 792 2504
+to pdf: width  612 1901
+
+-- limits: xmin: -964.7869262695312 xmax: 963.8910522460938 ymin: 102.65512084960938 ymax: 2571.956298828125
+to pdf: height 792 2470
+to pdf: width  612 1929
+
+-- limits: xmin: -624.6351928710938 xmax: 881.5958862304688 ymin: 276.4684753417969 ymax: 2464.8125
+to pdf: height 792 2189
+to pdf: width  612 1507
+
+-- limits: xmin: -964.75 xmax: 17.560333251953125 ymin: 8.497292469655804e-07 ymax: 996.9588623046875
+to pdf: height 792 1872
+to pdf: width  612 1404
+
+f = '3bb743f8-15b9-45a5-87a1-1369dff6769c/6bf1e7b6-8c34-4c7e-85d3-ff9b01039cb0.rm'
+
+E = [e for e in annotations.read_blocks(f)]
+E[8].__class__.__name__
+  'SceneLineItemBlock'
+E[8].item.value.color
+  <PenColor.BLACK: 0>
+
+E[8].item.value.tool
+ <Pen.FINELINER_2: 17>
+
+E[8].item.value.points
+E[8].item.value.points[5]
+  Point(x=-624.500244140625, y=2326.9541015625, speed=1, direction=69, width=11, pressure=136)
+E[8].item.value.thickness_scale
+  1.3742877492877492
+E[8].item.value.starting_length
+  0.0
+
         """
     if (not osp.isfile(pdf) or not pdf.endswith('.pdf')
         or not _is_uuid(osp.splitext(osp.basename(pdf))[0])):
@@ -649,9 +697,11 @@ def export_merged_pdf(pdf: str,
         if page in annotations:
             name = f"_{page:03d}".join(osp.splitext(name))
             # temp_pdf = "temp_pdf.pdf"
-            remarkable_rm_to_pdf(annotations[page], outfile=temp_pdf, width=_info['width'][page],
-                                 height=_info['height'][page], thick=stroke_scale,
-                                 rescale=annotation_scale)
+
+            remarkable_rm_to_pdf(annotations[page], outfile=temp_pdf,
+                                 width=_get_item(_info['width'], page),
+                                 height=_get_item(_info['height'], page),
+                                 thick=stroke_scale, rescale=annotation_scale)
             main = pypdf.PdfReader(pdf)
             overlay = pypdf.PdfReader(temp_pdf)
             mainpage = main.pages[page]
@@ -670,9 +720,11 @@ def export_merged_pdf(pdf: str,
         for i in range(num_pages):
             mainpage = main.pages[i]
             if i in annotations:
-                remarkable_rm_to_pdf(annotations[i], outfile=temp_pdf, width=_info['width'][i],
-                                    height=_info['height'][i], thick=stroke_scale,
-                                    rescale=annotation_scale)
+
+                remarkable_rm_to_pdf(annotations[i], outfile=temp_pdf,
+                                     width=_get_item(_info['width'], i),
+                                    height=_get_item(_info['height'], i),
+                                    thick=stroke_scale, rescale=annotation_scale)
                 overlay = pypdf.PdfReader(temp_pdf)
                 mainpage.merge_page(overlay.pages[0])
             pdf_writer.add_page(mainpage)
@@ -680,3 +732,8 @@ def export_merged_pdf(pdf: str,
             pdf_writer.write(fi)
 
     return name
+
+def _get_item(x: Union[list, float, int], idx: int) -> Union[int, float]:
+    if isinstance(x, (int, float)):
+        return x
+    return x[idx]
