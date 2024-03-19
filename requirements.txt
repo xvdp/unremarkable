@@ -1,2 +1,2 @@
 pypdf
-cairosvg
+reportlab

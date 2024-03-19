@@ -70,7 +70,7 @@ class TaggedBlockReader:
         self.data.read_tag(index, TagType.ID)
         result = self.data.read_crdt_id()
         return result
-    
+
     # def read_id(self, index: int) -> CrdtId:
     #     """Read a tagged CRDT ID."""
     #     self.data.read_tag(index, TagType.ID)
@@ -185,7 +185,7 @@ class TaggedBlockReader:
         min_version = self.data.read_uint8()
         current_version = self.data.read_uint8()
         block_type = self.data.read_uint8()
-        _logger.debug(f"Block header: {min_version}, {current_version}, {block_type}")
+        _logger.debug("Block header: %d %d %d", min_version, current_version, block_type)
         assert unknown == 0
         assert current_version >= 0
         assert min_version >= 0
@@ -249,7 +249,7 @@ class TaggedBlockReader:
                     "a newer format than this reader supports."
                 )
                 self._warned_about_extra_data = True
-            _logger.info(f"In {block_info} only read {i1 - i0} bytes")
+            _logger.info("In %s only read %d bytes", block_info, i1 - i0)
             # Discard the rest
             remaining = i0 + length - i1
             excess = self.data.read_bytes(remaining)

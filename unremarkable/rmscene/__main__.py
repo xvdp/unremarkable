@@ -2,6 +2,7 @@
 
 import sys
 import argparse
+import pprint
 from . import read_blocks
 
 
@@ -12,8 +13,6 @@ def parse_args(args):
 
 
 def pprint_file(args) -> None:
-    import pprint
-
     result = read_blocks(args.file)
     for el in result:
         print()
@@ -21,5 +20,5 @@ def pprint_file(args) -> None:
 
 
 if __name__ == "__main__":
-    args = parse_args(sys.argv[1:])
-    pprint_file(args)
+    ARGS = parse_args(sys.argv[1:])
+    pprint_file(ARGS)

@@ -362,12 +362,12 @@ def point_serialized_size(version: int = 2) -> int:
     elif version == 2:
         return 0x0E
     else:
-        raise ValueError("Unknown version %s" % version)
-    
+        raise ValueError(f"Unknown version {version}")
+
 
 def point_to_stream(point: si.Point, writer: TaggedBlockWriter, version: int = 2):
     if version not in (1, 2):
-        raise ValueError("Unknown version %s" % version)
+        raise ValueError(f"Unknown version {version}")
     d = writer.data
     d.write_float32(point.x)
     d.write_float32(point.y)
@@ -398,8 +398,7 @@ def line_from_stream(stream: TaggedBlockReader, version: int = 2) -> si.Line:
         point_size = point_serialized_size(version)
         if data_length % point_size != 0:
             raise ValueError(
-                "Point data size mismatch: %d is not multiple of point_size"
-                % data_length
+                f"Point data size mismatch: {data_length} is not multiple of point_size"
             )
         num_points = data_length // point_size
         points = [point_from_stream(stream, version=version) for _ in range(num_points)]
@@ -452,7 +451,7 @@ class SceneItemBlock(Block):
             subclass = SceneTextItemBlock
         else:
             raise ValueError(
-                "unknown scene type %d in %s" % (block_type, stream.current_block)
+                f"unknown scene type {block_type} in {stream.current_block}"
             )
 
         parent_id = stream.read_id(1)
@@ -872,9 +871,7 @@ def build_tree(tree: SceneTree, blocks: Iterable[Block]):
             # Add this entry to children of parent_id
             node_id = b.item.value
             if node_id not in tree:
-                raise ValueError(
-                    "Node does not exist for SceneGroupItemBlock: %s" % node_id
-                )
+                raise ValueError(f"Node does not exist for SceneGroupItemBlock: {node_id}")
             item = replace(b.item, value=tree[node_id])
             tree.add_item(item, b.parent_id)
         elif isinstance(b, (SceneLineItemBlock, SceneGlyphItemBlock)):

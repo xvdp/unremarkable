@@ -4,22 +4,14 @@ ENTRY POINTS:
 
 $ pdf_to_remarkable path/to/file.pdf ["remarkable folder name"] ["file visible name"]
 $ backup_remarkable [path/to/backup/folder]
-
-TODO:
-* export folder structure tuple dicts folder:{uuid:uuid, name:uuid, ..., subfolder:{}}
-* test: inverse functions: get_uuid_from_name(name) -> get_folder_name(id), ensure it is folder
-* test: after uploading pdf, content, metadata, check that they are there.
 """
-from typing import Optional, Union
+from typing import Optional
 import os
 import os.path as osp
 import subprocess as sp
-import tempfile
 import uuid
 import json
 import pypdf
-from .rmscene import remarkable_rm_to_svg, remarkable_rm_to_pdf
-
 ##
 # config
 #
@@ -249,7 +241,7 @@ def get_parent(name: str, folder: str = '.') -> tuple:
 
 
 def get_uuid_from_name(name: str, target_type = "CollectionType", **kwargs) -> Optional[str]:
-    """ returns uuid from a folder or file visibleName
+    """ returns uuid from a folder or file visibleName - ON remarkable tablet
     Args:
         name    (str) visible name in remarkable
         target_type (str [ CollectionType]) | DocumentType
@@ -352,17 +344,36 @@ def make_metadata(pdf, name, parent=""):
 ##
 # rsync backup of ./local/share/remarkable/xochitl
 #
-def backup_tablet(folder: str = ".", **kwargs) -> int:
+
+
+def backup_tablet(folder: Optional[str] = None, **kwargs) -> int:
     """ backup script
     Args
-        folder ['.'] - if /xochitl exists, sync, else, create new xochitl folder
-            if folder == '?' search for existing backup under current tree
+        folder [None] - if /xochitl folder is registered in ~/xochitl, else "."
+            '?' search for existing recursively '.', do not thing if not found
+            '<valid folder>
+        saves xochitl folder in ~/.xochilt test file
     """
-    if folder == "?":
-        folder = _find_folder('xochitl')
-        if folder is None:
-            return None
+    # 1. is remarkable plugged in
+    host, user, path = get_host_user_path(**_kwargs_get(**kwargs))
+    if not _is_host_reachable(host, packets=2):
+        print (f"host <{host}> is not reachable")
+        return 1
 
+    if folder is None:
+        folder = _get_xochitl()
+        if folder is None:
+            folder = "."
+
+    # 2. get folder
+    if folder == "?":
+        folder = _get_xochitl()
+        if folder is None:
+            folder = _find_folder('xochitl')
+            if folder is None:
+                return None
+
+    # a bit messy, the update command needs the parent of xochitl.
     assert osp.isdir(folder), f"local backup folder '{folder}' not found, nothing done."
     folder = osp.abspath(osp.expanduser(folder))
     if osp.basename(folder) == 'xochitl':
@@ -372,13 +383,13 @@ def backup_tablet(folder: str = ".", **kwargs) -> int:
     if not osp.isdir(xochitl):
         print(f"Creating new remarkable backup {xochitl}")
 
-    host, user, path = get_host_user_path(**_kwargs_get(**kwargs))
-
     cmd = ['rsync',
            '-avzhrP',   # archive, verbose, compress, human-readable, recursive partial, progress
            '--update',  # Skip files that are newer on the receiver
            f'{user}@{host}:{path}', folder]
-    return _run_cmd(cmd, check=True, shell=False)
+    out = _run_cmd(cmd, check=True, shell=False)
+    _set_xochitl(xochitl)
+    return out
 
 ##
 # build visible name graph from backup # local scripts
@@ -404,14 +415,17 @@ def build_name_graph(uidgraph, folder, graph):
                 build_name_graph(value, folder, graph[x['visibleName']])
 
 
-def build_file_graph(folder: str) -> Optional[dict]:
+def build_file_graph(folder: str, dir_type: bool = False) -> Optional[dict]:
     """ builds uuid and name graph from local reMarkable backup
     Args
-        folder      str local folder must be either be 'xochitl', parent to xochitl or ? to find it
+        folder      (str) local folder:  'xochitl', parent to xochitl, or ?
+        dir_type    (bool [False]) only list folders
     """
     kinship = {}
     if folder == "?":
-        folder = _find_folder('xochitl')
+        folder = _get_xochitl()
+        if folder is None:
+            folder = _find_folder('xochitl')
     if not osp.isdir(folder or  ""):
         print(f"folder <{folder}> not found, pass valid folder.")
         return None
@@ -429,10 +443,14 @@ def build_file_graph(folder: str) -> Optional[dict]:
         return None
 
 
-    print(f"backup folder: \033[34m {osp.abspath(osp.expanduser(folder))} \033[0m" )
+    print(f"\033[32mreMarkable backup dir: \033[34m{osp.abspath(osp.expanduser(folder))} \033[0m")
+    if dir_type:
+        print("  \033[31mlisting folders \033[0m" )
     for file in files:
         with open(file, 'r', encoding='utf8') as fi:
             x = json.load(fi)
+        if dir_type and x['type'] != "CollectionType":
+            continue
         parent = x["parent"]
         name = osp.basename(osp.splitext(file)[0])
         if parent not in kinship:
@@ -452,7 +470,9 @@ def build_file_graph(folder: str) -> Optional[dict]:
 # miscelaneous
 #
 def get_pdf_info(pdf: str, page: Optional[int] = None):
-    """ get number of pages and page sizes"""
+    """ get number of pages and page sizes
+    
+    """
     with open(pdf, 'rb') as _fi:
         red = pypdf.PdfReader(_fi)
         num = len(red.pages)
@@ -481,9 +501,32 @@ def _find_folder(name: str, root: str = '.') -> Optional[str]:
     """recursively finds  folder of a given name"""
     for dirpath, dirnames, _ in os.walk(root):
         if name in dirnames:
-            return os.path.join(dirpath, name)
+            folder = os.path.join(dirpath, name)
+            return osp.abspath(osp.expanduser(folder))
     print(f"No existing folder {name} under {os.getcwd()}, nothing done")
     return None
+
+def _get_xochitl(**kwargs):
+    """get backup name  from ~/.xochitl"""
+    _root = osp.abspath(osp.expanduser(kwargs.get('root', '~')))
+    _xochitl = osp.join(_root, '.xochitl')
+    if osp.isfile(_xochitl):
+        with open(_xochitl, 'r', encoding='utf') as _fi:
+            out = _fi.read().split("\n")[0]
+            assert osp.isdir(out), f"xochitl stored but not found <{out}>"
+            return out
+    return None
+
+def _set_xochitl(folder: str, **kwargs):
+    """ set backup folder """
+    folder = osp.abspath(osp.expanduser(folder))
+    assert osp.isdir(folder), f"folder {folder} invalid"
+
+    # store information in root/.xochitl
+    _root = osp.abspath(osp.expanduser(kwargs.get('root', '~')))
+    _xochitl = osp.join(_root, '.xochitl')
+    with open(_xochitl, 'w', encoding='utf') as _fi:
+        _fi.write(folder)
 
 def replace_pdf(pdf, visible_name, **kwargs) -> int:
     """
@@ -515,225 +558,3 @@ def _run_cmd(cmd, check=True, shell=False, text=True) -> int:
     except sp.CalledProcessError as e:
         print("An error occurred:", e.stderr)
     return 1
-
-
-def export_rm(rm_file: str,
-              out: str,
-              width: Optional[float] = None,
-              height: Optional[float] = None) -> None:
-    """ exports single rm markup file to svg or pdf
-    Args
-        rm_file     (str)   remarkable .rm file version 6
-        out         (str)   <name>.svg or <name>.pdf
-        width       (int)
-    """
-    assert out.endswith(".pdf") or out.endswith(".svg"), f"expected .pdf or .svg got <{out}>"
-
-    if out.endswith(".pdf"):
-        remarkable_rm_to_pdf(rm_file, out)
-    else:
-        remarkable_rm_to_svg(rm_file, out)
-
-
-def _get_page_data(content: dict, force: bool = False) -> list:
-    """ return a list of page uuids based on uuid.content
-        annotations can appear as 'pages':[uuids, ..]
-        or 'cPages':{'pages':[{'id':uuid}, ..]}
-    """
-    pages = []
-    page_ids = [] # page uuids
-    if 'cPages' in content and 'pages' in content['cPages']:
-        pages = content['cPages']['pages']
-    elif 'pages' in content:
-        pages = content['pages']
-
-    for i, page in enumerate(pages):
-        if isinstance(page, str) and _is_uuid(page):
-            page_ids.append(page)
-        elif isinstance(page, dict) and 'id' in page and _is_uuid(page['id']):
-            page_ids.append(page['id'])
-        else:
-            assert False, f"cannot recognize annotation pages {pages}"
-    assert not force or page_ids, f"expecting content with annotations, got none? {content}"
-    return page_ids
-
-
-def get_annotation_files(pdf: str) -> tuple:
-    """ return {page_n:uuid/annot_uuid.rm}, num_pages
-    Args
-        pdf     (str) uuid.pdf of remarkable fomat
-    reads uuid.content containing annotation page info 
-    """
-    content = pdf.replace('.pdf', '.content')
-    folder = osp.splitext(pdf)[0]
-    assert osp.isfile(content), f"<{content}> file not found, cannot aligned rm files"
-    with open(content, 'r', encoding='utf8') as fi:
-        cont = json.load(fi)
-    num_pages = cont["pageCount"]
-
-    # orientation = cont['orientation']
-    # _info = get_pdf_info(pdf)
-
-    pages = _get_page_data(cont)
-    assert num_pages == len(pages), f"num_pages {num_pages}  len(pages) {len(pages)}"
-
-    # build dictionary page_:file.rm
-    annotation_files = {i:osp.join(folder, f"{pages[i]}.rm")
-                        for i in range(num_pages)
-                        if osp.isfile(osp.join(folder, f"{pages[i]}.rm"))}
-
-    return annotation_files, num_pages
-
-def export_merged_pdf(pdf: str,
-                      folder: Optional[str] = ".",
-                      name: Optional[str] = None,
-                      page: Optional[int] = None,
-                      stroke_scale: float = 0.6,
-                      annotation_scale: float = 1.0) -> Optional[str]:
-    """ Exports pdf merged with remarkable annotations as pdf
-    Args
-        pdf     (str) .pdf file in remarkable format: uuid.pdf with
-            uuid.metadata, uuid.content & uuid/*.rm  exported to local backup
-        folder  (str ['.']) output folder
-        name    (str [None]) if None -> visible_name.replace(" ", "_")+".pdf"
-        page    (int [None]) if None export all pages
-        stroke_scale (float [0.6]) svg is improperly scaled atm, rescale
-    TODO: does orientation, customZoom parameters matter?
-    .content contains annotation notes in diferent formats:
-        'pages'
-        '3bb743f8-15b9-45a5-87a1-1369dff6769c'
-            "coverPageNumber": 0,
-            "customZoomCenterX": 0,
-            "customZoomCenterY": 936,
-            "customZoomOrientation": "portrait",
-            "customZoomPageHeight": 1872,
-            "customZoomPageWidth": 1404,
-            "customZoomScale": 1,
-        'cPages'
-        # file ='3c50b5d6-e9b3-4dae-8280-42c5490b83f3.pdf'
-            "customZoomCenterX": -4.984733205774539,
-            "customZoomCenterY": 1338.400865750464,
-            "customZoomOrientation": "portrait",
-            "customZoomPageHeight": 2654,
-            "customZoomPageWidth": 1877,
-            "customZoomScale": 0.802450168319183,
-
-        "coverPageNumber": 0,
-        "customZoomCenterX": 0,
-        "customZoomCenterY": 936,
-        "customZoomOrientation": "portrait",
-        "customZoomPageHeight": 1872,
-        "customZoomPageWidth": 1404,
-        "customZoomScale": 1,
-
--- limits: xmin: -964.75 xmax: 964.0001220703125 ymin: 0.06121639162302017 ymax: 2571.68505859375
-to pdf: height 792 2572
-to pdf: width  612 1929
-
--- limits: xmin: -965.3641967773438 xmax: 935.1143798828125 ymin: 67.4096908569336 ymax: 2571.29248046875
-to pdf: height 792 2504
-to pdf: width  612 1901
-
--- limits: xmin: -964.7869262695312 xmax: 963.8910522460938 ymin: 102.65512084960938 ymax: 2571.956298828125
-to pdf: height 792 2470
-to pdf: width  612 1929
-
--- limits: xmin: -624.6351928710938 xmax: 881.5958862304688 ymin: 276.4684753417969 ymax: 2464.8125
-to pdf: height 792 2189
-to pdf: width  612 1507
-
--- limits: xmin: -964.75 xmax: 17.560333251953125 ymin: 8.497292469655804e-07 ymax: 996.9588623046875
-to pdf: height 792 1872
-to pdf: width  612 1404
-
-f = '3bb743f8-15b9-45a5-87a1-1369dff6769c/6bf1e7b6-8c34-4c7e-85d3-ff9b01039cb0.rm'
-
-E = [e for e in annotations.read_blocks(f)]
-E[8].__class__.__name__
-  'SceneLineItemBlock'
-E[8].item.value.color
-  <PenColor.BLACK: 0>
-
-E[8].item.value.tool
- <Pen.FINELINER_2: 17>
-
-E[8].item.value.points
-E[8].item.value.points[5]
-  Point(x=-624.500244140625, y=2326.9541015625, speed=1, direction=69, width=11, pressure=136)
-E[8].item.value.thickness_scale
-  1.3742877492877492
-E[8].item.value.starting_length
-  0.0
-
-        """
-    if (not osp.isfile(pdf) or not pdf.endswith('.pdf')
-        or not _is_uuid(osp.splitext(osp.basename(pdf))[0])):
-        print(f"pass valid remarkable uuid.pdf file, got <{pdf}> \
-              isfile: {osp.isfile(pdf)}, {len(osp.basename(pdf))} ?= 40 ")
-        return None
-
-    # resolve output name from visibleName in uuid.metadata
-    if name is None:
-        metadata = pdf.replace('pdf', 'metadata')
-        assert osp.isfile(metadata), f"<{metadata}> file not found, pass explicit name"
-        with open (metadata, 'r', encoding='utf8') as fi:
-            m = json.load(fi)
-            name = m['visibleName'].replace(' ', '_')
-    if name[-4:] != '.pdf':
-        name += '.pdf'
-    name = osp.join(folder, "_annotated".join(osp.splitext(name)))
-
-    # get annotations from uuid.content
-    # TODO get zoom, and other infos
-    annotations, num_pages = get_annotation_files(pdf)
-    if not annotations:
-        print(f"file {pdf} has no annotations")
-        return None
-
-    temp_pdf = tempfile.NamedTemporaryFile().name + ".pdf"
-    _info = get_pdf_info(pdf)
-
-    if page is not None:
-        if page in annotations:
-            name = f"_{page:03d}".join(osp.splitext(name))
-            # temp_pdf = "temp_pdf.pdf"
-
-            remarkable_rm_to_pdf(annotations[page], outfile=temp_pdf,
-                                 width=_get_item(_info['width'], page),
-                                 height=_get_item(_info['height'], page),
-                                 thick=stroke_scale, rescale=annotation_scale)
-            main = pypdf.PdfReader(pdf)
-            overlay = pypdf.PdfReader(temp_pdf)
-            mainpage = main.pages[page]
-            pdf_writer = pypdf.PdfWriter()
-            mainpage.merge_page(overlay.pages[0])
-            pdf_writer.add_page(mainpage)
-            with open(name, 'wb') as fi:
-                pdf_writer.write(fi)
-
-        else:
-            print(f"page {page} has no annotations")
-            return None
-    else:
-        main = pypdf.PdfReader(pdf)
-        pdf_writer = pypdf.PdfWriter()
-        for i in range(num_pages):
-            mainpage = main.pages[i]
-            if i in annotations:
-
-                remarkable_rm_to_pdf(annotations[i], outfile=temp_pdf,
-                                     width=_get_item(_info['width'], i),
-                                    height=_get_item(_info['height'], i),
-                                    thick=stroke_scale, rescale=annotation_scale)
-                overlay = pypdf.PdfReader(temp_pdf)
-                mainpage.merge_page(overlay.pages[0])
-            pdf_writer.add_page(mainpage)
-        with open(name, 'wb') as fi:
-            pdf_writer.write(fi)
-
-    return name
-
-def _get_item(x: Union[list, float, int], idx: int) -> Union[int, float]:
-    if isinstance(x, (int, float)):
-        return x
-    return x[idx]

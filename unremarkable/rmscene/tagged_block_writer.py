@@ -129,7 +129,7 @@ class TaggedBlockWriter:
         self.data.write_tag(index, TagType.Length4)
         self.data.write_uint32(len(subblock_buf.getbuffer()))
         self.data.write_bytes(subblock_buf.getbuffer())
-        _logger.debug(f"Wrote subblock {index}: {subblock_buf.getvalue().hex()}")
+        _logger.debug("Wrote subblock %d: %s", index, subblock_buf.getvalue().hex())
 
     ## Higher level constructs
 

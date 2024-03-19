@@ -30,7 +30,7 @@ class SceneTree:
 
     def add_node(self, node_id: CrdtId, parent_id: CrdtId):
         if node_id in self._node_ids:
-            raise ValueError("Node %s already in tree" % node_id)
+            raise ValueError(f"Node {node_id} already in tree")
         node = si.Group(node_id)
         self._node_ids[node_id] = node
         # parent = self._node_ids[parent_id]
@@ -38,7 +38,7 @@ class SceneTree:
 
     def add_item(self, item: CrdtSequenceItem[si.SceneItem], parent_id: CrdtId):
         if parent_id not in self._node_ids:
-            raise ValueError("Parent id not known: %s" % parent_id)
+            raise ValueError(f"Parent id not known: {parent_id}")
         parent = self._node_ids[parent_id]
         parent.children.add(item)
 

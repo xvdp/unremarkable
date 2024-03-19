@@ -239,7 +239,7 @@ def write_crdt_id(self, value: CrdtId):
     # Based on ddvk's reader.go
     # TODO: should be var unit?
     if value.part1 >= 2**8 or value.part2 >= 2**64:
-        raise ValueError("CrdtId too large: %s" % value)
+        raise ValueError(f"CrdtId too large: {value}")
     self.write_uint8(value.part1)
     self.write_varuint(value.part2)
     # result = (part1 << 48) | part2
