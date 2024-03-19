@@ -415,14 +415,15 @@ def build_name_graph(uidgraph, folder, graph):
                 build_name_graph(value, folder, graph[x['visibleName']])
 
 
-def build_file_graph(folder: str, dir_type: bool = False) -> Optional[dict]:
+def build_file_graph(folder: Optional[str] = None, dir_type: bool = False) -> Optional[dict]:
     """ builds uuid and name graph from local reMarkable backup
     Args
         folder      (str) local folder:  'xochitl', parent to xochitl, or ?
         dir_type    (bool [False]) only list folders
     """
     kinship = {}
-    if folder == "?":
+
+    if folder == "?" or folder is None:
         folder = _get_xochitl()
         if folder is None:
             folder = _find_folder('xochitl')

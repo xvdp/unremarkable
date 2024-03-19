@@ -7,13 +7,14 @@ import os.path as osp
 import pprint
 
 from .unremarkable import backup_tablet, upload_pdf, build_file_graph, get_pdf_info, \
-    _is_host_reachable
+    _is_host_reachable, _get_xochitl
 from .rm_to_pdf import export_merged_pdf
 from . import rmscene
 
 _A="\033[0m"
 _G="\033[34m"
 _R="\033[31m"
+_Y="\033[32m"
 _B="\033[36m"
 ##
 # console entry points
@@ -59,7 +60,7 @@ def remarkable_ls():
             a 'xochitl' folder needs to exist 
     """
     parser = argparse.ArgumentParser(description='print remrkable file graph from backup')
-    parser.add_argument('folder', type=str, nargs='?', default='.',
+    parser.add_argument('folder', type=str, nargs='?', default=None,
                         help='folder with remarkable backup, if ? searches for previous backups')
     parser.add_argument('-d', '--dir_type', action='store_true',
                         help='only list folders')
@@ -139,8 +140,19 @@ def remarkable_help():
     else:
         _col = _R
         connected = "IS NOT"
+    xochitl = _get_xochitl()
+    if xochitl is not None:
+        _col2 = _Y
+        xochitl=f": {xochitl}"
+        isstored=""
+    else:
+        _col2 = _R
+        xochitl=""
+        isstored=" NOT YET"
+
     _help = f""" unremarkable console functions to access reMarkable tablet without app.
-    reMarkable tablet {_col}{connected} connected {_A} through USB IP {ip}.
+    reMarkable tablet {_col}{connected} connected {_A} through USB IP {_col}{ip}{_A}.
+    backup folder{_col2}{isstored} stored in ~/.xochitl{xochitl} {_A}
 
     Console Functions
         $ {_B}remarkable_backup {_A}<folder> # folder in (existing dir, ?, )
