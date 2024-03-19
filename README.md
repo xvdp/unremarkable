@@ -63,10 +63,9 @@ pdf_to_remarkable <localfile.pdf|*> [parent folder name] --name <visible name> -
 ```
 ### download: export merged .pdf and .rm annotations; rm v6 files only
 ``` bash
-remarkable_export_annotated <uuid.pdf> [<name.pdf>]
-# exports annotated pdf, input pdf has to be in remarkable format uuid.pdf accompanied by uuid/ with annotation.rm files
-# optional arg name.pdf, if not passed uses visible_name.replace(" ", "_")+"_merged.pdf"
-# SCALE is still a bit wonky, 
+remarkable_export_annotated <uuid or name> [page] [folder] [out_name] [xochitl folder]
+# exports annotated pdf from local backup
+# only file name is required
 # Only version 6 .rm supported
 ```
 
@@ -74,7 +73,9 @@ remarkable_export_annotated <uuid.pdf> [<name.pdf>]
 ```bash
 #!/bin/bash
 remarkable_backup [<local_folder>]
-#   local_folder arg optional, default '.', if passed, it must exist
+#   local_folder arg optional, default None -> stored path in ~/.xochitl or '.'
+#       if folder passed it must exist.
+#    stores folder to ~/.xochitl file
 # backup is done with incremental rsync -avzhP --update
     # archive, verbose, compress, human-readable, partial, progress, newer files only
 ```

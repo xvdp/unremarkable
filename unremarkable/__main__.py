@@ -115,7 +115,8 @@ def remarkable_export_annotated():
     parser.add_argument('xochitl', type=str, nargs='?', default=None,
                         help='xochitl directory if None reads from ~/.xochitl')
     args = parser.parse_args()
-    export_merged_pdf(args.file, args.page, args.folder, args.out_name, args.xochitl)
+    page = True if args.page is None else page
+    export_merged_pdf(args.file, page, args.folder, args.out_name, args.xochitl)
 
 
 def remarkable_read_rm():
