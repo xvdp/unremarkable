@@ -382,6 +382,8 @@ def backup_tablet(folder: Optional[str] = None, **kwargs) -> int:
     xochitl = osp.join(folder, 'xochitl')
     if not osp.isdir(xochitl):
         print(f"Creating new remarkable backup {xochitl}")
+    else:
+        print(f"backup to existing xochitl folder: {xochitl}")
 
     cmd = ['rsync',
            '-avzhrP',   # archive, verbose, compress, human-readable, recursive partial, progress

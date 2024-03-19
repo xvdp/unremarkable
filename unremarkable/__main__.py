@@ -184,10 +184,9 @@ def remarkable_help():
             returns number of pages, width, height of a pdf in a LOCAL folder
 
         $ {_B}remarkable_export_annotated{_A} <filename> [page] [folder] [name] [xochitl]
-            export annotaed pdf
+            export annotated pdf from local backup - only line blocks, no text
 
         $ {_B}remarkable_read_rm{_A} <file.rm>
-            reads and prints rm file
-            - forwarding of github.com/ficklupton/rmscene.__main__ 
+            reads and prints .rm file
     """
     print (_help)
