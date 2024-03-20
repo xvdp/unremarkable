@@ -42,7 +42,7 @@ def pdf_to_remarkable():
         --no_restart      default restarts xochitl service to show upload, disable
     """
     parser = argparse.ArgumentParser(description='Upload pdf')
-    parser.add_argument('pdf', type=str, help='valid .pdf file or *')
+    parser.add_argument('pdf', type=str, help='valid .pdf file or "*"')
     parser.add_argument('parent', type=str, nargs='?', default='',
                         help='destination folder visible name')
     parser.add_argument('-n', '--name', type=str, default=None,
