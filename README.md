@@ -2,15 +2,31 @@
 ## reMarkable tablet IO via SSH, without app.
 ### `pdf_to_remarkable` upload local pdf to reMarkable
 ### `remarkable_backup` rsync from reMarkable to local
-### `remarkable_ls` print directory of backup files as visibleNames:uuids 
-### `remarkable_export_annotated` merges v.6 annotations with pdf - offsets and scale is a bit off TODO 
+### `remarkable_ls` print directory of backup files as visibleNames:uuids / From backup
+### `remarkable_export_annotated` merges v.6 annotations with pdf - only lines, no text
+### `remarkable_restart` restarts xochitl service
 
-I wrote these code snippets in order to use the reMarkable tablet similar to its behavior prior to version 3.5.  I stopped automatic updates after v3.5 to prevent any surprises - if anyone! tries this on a newer tablet, let me know if it still works - I would probably then update mine.
+I wrote these code snippets in order to use the reMarkable tablet similar to its behavior prior to version 3.5.  I stopped automatic updates after v3.5 to prevent any surprises.
+
+Other possible useful functions available through python
+```python
+from unremarkable import remarkable_backup, export_merged_pdf, upload_pdf # mirrors console commands
+from unremarkable import add_authors, get_annotated, remarkable_name
+# add author names to .content to local backup then upload to remarkable to show in ui
+add_authors(filename, authors=('J. Doe', 'P. Einstein'), year=2122, restart=True) # tablet file must be closed to update
+# returns a list with all annotated files in backup
+pprint.pprint(get_annotated())
+# resolve uuid and visible name from uuid or sufficiently unique partial name
+remarkable_name("perturbation inactivation")
+[*] ('98934bc7-2278-4e43-b2ac-1b1675690074', 'Perturbation Inactivation Based Adversarial Defense for Face Recognition')
+
+```
+
+
 
 ## TODO
 - [ ] Tests
 - [ ] Validate on MacOS
-- [ ] remarkable_export_annotated v.6 not fully aligned to pdf
 
 ## info
 Works with tablet

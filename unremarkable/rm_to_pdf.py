@@ -16,7 +16,7 @@ import pypdf
 
 # .rm version 6 api
 from .rmscene import SceneLineItemBlock, Line, read_blocks
-from .unremarkable import get_pdf_info, _is_uuid, _find_folder, _get_xochitl
+from .unremarkable import get_pdf_info, restart_xochitl, _is_uuid, _find_folder, _get_xochitl, _rsync_up
 
 
 def read_rm(data: Union[str, BinaryIO]) -> list:
@@ -197,7 +197,11 @@ def get_annotated(folder: str = "?") -> dict:
 
     contents = [f.path for f in os.scandir(folder) if f.name.endswith('.content')]
     for i, c in enumerate(contents):
-        with open(c.replace('.content', '.metadata'), 'r', encoding='utf8') as fi:
+        metadata = c.replace('.content', '.metadata')
+        if not osp.isfile(metadata):
+            print(f"no metadata file for content file {c}, skipping")
+            continue
+        with open(metadata, 'r', encoding='utf8') as fi:
             m = json.load(fi)
         if m['type'] == 'DocumentType':
             name = m['visibleName']
@@ -361,6 +365,15 @@ def get_content_file(uid, xochitl: Optional[str] = None) -> str:
 ###
 # export merged pdf
 #
+def remarkable_name(filename, xochitl: Optional[str] = None) -> tuple:
+    """resolve uuid and visible name 
+    Args
+        filename    str if partial name is not sufficiently unique asserts and prints all possible names
+        
+    """
+    file_uuid, name, metadata, content, pdf = _gather_uuid_info(filename, xochitl)
+    return file_uuid, name
+
 def _gather_uuid_info(filename, xochitl: Optional[str] = None) -> tuple:
     if xochitl is None:
         xochitl = _get_xochitl()
@@ -386,6 +399,49 @@ def _gather_uuid_info(filename, xochitl: Optional[str] = None) -> tuple:
     file_uuid = osp.splitext(osp.basename(metadata))[0]
 
     return file_uuid, name, metadata, content, pdf
+
+def add_authors(filename: str,
+                authors: Union[str, tuple],
+                title: Optional[str] = None,
+                year: Union[str, int, None] = None,
+                xochitl: Optional[str] = None,
+                override: bool = False,
+                upload: bool = True,
+                restart: bool = False):
+    """ add Authors to .content json file so they show in remarkable UI
+    Args
+        filename    (str) uuid or visible name (can be partial if unique)
+        authors     (str, tuple)
+        title       (str [None]) only writes if override set to True
+        year        (int, str) if passed, concat to authors so it shows in xochitl
+        upload      (bool [True]) upload to tablet, False: only local file
+        restart     (bool [False]) restarts xochitl service
+    Example:
+     add_authors('Learning to Learn', ['S. Fang', 'J. Li', 'X. Lin', 'R. Ji'], year=2021)
+     add_authors('60e7724c-61cc-492d-9d37-cc14430e0efd', ['S. Fang', 'J. Li', 'X. Lin', 'R. Ji'], year=2021)
+    """
+    file_uuid, name, metadata, content, pdf = _gather_uuid_info(filename, xochitl)
+
+    with open(content, 'r', encoding='utf8') as _fi:
+        data = json.load(_fi)
+    if 'documentMetadata' not in content:
+        data['documentMetadata'] = {}
+    if isinstance(authors, str):
+        authors = [authors]
+    if len(authors) > 1:
+        authors = [", ".join(authors)] # examples are all lists of 1 str
+    if year is not None:
+        authors[-1] = authors[-1]+f", {year}"
+    data['documentMetadata']['authors'] = list(authors)
+    if title is not None and (override or 'title' not in data['documentMetadata']):
+        data['documentMetadata']['title'] = title
+    with open(content, 'w', encoding='utf8') as _fi:
+        json.dump(data, _fi, indent = 4)
+    if upload:
+        _rsync_up(content)
+        if restart:
+            restart_xochitl()
+
 
 # from backup
 def export_merged_pdf(filename: str,

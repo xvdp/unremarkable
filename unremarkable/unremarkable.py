@@ -77,7 +77,7 @@ def upload_pdf(pdf: str,
             for pdf in pdfs:
                 upload_pdf(pdf, folder, visible_name, False, **kwargs)
             if restart:
-                _restart_xochitl(**kwargs)
+                restart_xochitl(**kwargs)
         else:
             print(f"No pdfs found in {osp.abspath(osp.expanduser(osp.dirname(pdf)))}")
     else:
@@ -124,9 +124,9 @@ def upload_pdf(pdf: str,
 
         # rescan the folder structure
         if restart:
-            _restart_xochitl(**kwargs)
+            restart_xochitl(**kwargs)
 
-def _restart_xochitl(**kwargs) -> int:
+def restart_xochitl(**kwargs) -> int:
     """ serivce is restarted on reboot
     """
     host, user, _ = get_host_user_path(**_kwargs_get(**kwargs))
@@ -148,6 +148,23 @@ def _rsync_pdf(pdf: str,
            '-avzhP',   # archive, verbose, compress, human-readable, partial, progress
            '--update',  # Skip files that are newer on the receiver
            pdf, f'{user}@{host}:{name}']
+    return _run_cmd(cmd, check=True, shell=False)
+
+def _rsync_up(fname: str,
+              out_path: Optional[str] = None,
+              **kwargs) -> int:
+    """  upload file to xochitl path
+    TODO replace _rsync pdf"""
+    host, user, path = get_host_user_path(**_kwargs_get(**kwargs))
+    if not _is_host_reachable(host, packets=2):
+        print (f"host <{host}> is not reachable")
+        return 1
+    path = path if out_path is None else out_path
+    name = osp.join(path, osp.basename(fname))
+    cmd = ['rsync',
+           '-avzhP',   # archive, verbose, compress, human-readable, partial, progress
+           '--update',  # Skip files that are newer on the receiver
+           fname, f'{user}@{host}:{name}']
     return _run_cmd(cmd, check=True, shell=False)
 
 

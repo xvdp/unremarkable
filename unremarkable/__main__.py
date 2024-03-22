@@ -7,7 +7,7 @@ import os.path as osp
 import pprint
 
 from .unremarkable import backup_tablet, upload_pdf, build_file_graph, get_pdf_info, \
-    _is_host_reachable, _get_xochitl
+    _is_host_reachable, _get_xochitl, restart_xochitl
 from .rm_to_pdf import export_merged_pdf
 from . import rmscene
 
@@ -29,7 +29,7 @@ def remarkable_backup():
     """
     parser = argparse.ArgumentParser(description='Backup tablet')
     parser.add_argument('folder', type=str, nargs='?', default=None,
-                        help='backup folder, ? recursive search, None use saved in ~/.xochitl or "."')
+                        help='backup dir: ? recursive search | None from stored ~/.xochitl | "."')
     args = parser.parse_args()
     backup_tablet(args.folder)
 
@@ -39,7 +39,7 @@ def pdf_to_remarkable():
         pdf     (str) valid pdf file or *
         parent  (str ['']) destination folder visible name
         --name  (str [None]) visible name, if None: pdfbasename.replace("_"," ")  
-        --no_restart      default restarts xochitl service to show upload, disable
+        --no_restart_xochitl      default restart_xochitls xochitl service to show upload, disable
     """
     parser = argparse.ArgumentParser(description='Upload pdf')
     parser.add_argument('pdf', type=str, help='valid .pdf file or "*"')
@@ -47,11 +47,11 @@ def pdf_to_remarkable():
                         help='destination folder visible name')
     parser.add_argument('-n', '--name', type=str, default=None,
                         help='visible name; default is pdf basename without ext replacing "_"," "')
-    parser.add_argument('-r', '--no_restart', action='store_false', dest='restart',
-                        help='disable restart of xochitl service')
+    parser.add_argument('-r', '--no_restart_xochitl', action='store_false', dest='restart_xochitl',
+                        help='disable restart_xochitl of xochitl service')
     # Parse arguments
     args = parser.parse_args()
-    upload_pdf(args.pdf, args.parent, args.name, args.restart)
+    upload_pdf(args.pdf, args.parent, args.name, args.restart_xochitl)
 
 def remarkable_ls():
     """console entry point to print remarkable file graph from local backup
@@ -71,6 +71,10 @@ def remarkable_ls():
     else:
         pprint.pprint(graph)
 
+def remarkable_restart():
+    """ restart remarkable service
+    """
+    restart_xochitl()
 
 def pdf_info():
     """console entry point to return num pages, and dimensions of a local pdf

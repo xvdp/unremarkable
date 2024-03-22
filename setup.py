@@ -31,8 +31,8 @@ setup(
             'remarkable_ls=unremarkable.__main__:remarkable_ls', # . list files on backup
             'remarkable_export_annotated=unremarkable.__main__:remarkable_export_annotated',
             'remarkable_read_rm=unremarkable.__main__:remarkable_read_rm',
+            'remarkable_restart=unremarkable.__main__:remarkable_restart',
             'remarkable_help=unremarkable.__main__:remarkable_help'
-
         ],
     },
     python_requires='>=3.6',
