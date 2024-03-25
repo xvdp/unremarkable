@@ -8,7 +8,7 @@ import pprint
 
 from .unremarkable import backup_tablet, upload_pdf, build_file_graph, get_pdf_info, \
     _is_host_reachable, _get_xochitl, restart_xochitl
-from .rm_to_pdf import export_merged_pdf
+from .annotations import export_annotated_pdf
 from . import rmscene
 
 _A="\033[0m"
@@ -121,7 +121,7 @@ def remarkable_export_annotated():
                         help='xochitl directory if None reads from ~/.xochitl')
     args = parser.parse_args()
     page = True if args.page is None else page
-    export_merged_pdf(args.file, page, args.folder, args.out_name, args.xochitl)
+    export_annotated_pdf(args.file, page, args.folder, args.out_name, args.xochitl)
 
 
 def remarkable_read_rm():

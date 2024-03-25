@@ -515,7 +515,7 @@ def pdf_metadata(pdf: str,
         writer.write(output_pdf)
 
 
-def export_merged_pdf(filename: str,
+def export_annotated_pdf(filename: str,
                       page: Union[int, tuple, bool] = True,
                       out_folder: str = ".",
                       out_name: Optional[str] = None,

@@ -10,7 +10,13 @@ I wrote these code snippets in order to use the reMarkable tablet similar to its
 
 Other possible useful functions available through python
 ```python
-from unremarkable import remarkable_backup, export_merged_pdf, upload_pdf # mirrors console commands
+ # mirrors of console commands
+from unremarkable import remarkable_backup, export_annotated_pdf, upload_pdf
+
+# upload pdf to remarkable folder
+upload_pdf('Topology_Second_Edition.pdf', 'Maths')
+
+# python only
 from unremarkable import add_authors, pdf_metadata, get_annotated, remarkable_name
 
 # on local backup: add author names to .content
