@@ -105,12 +105,11 @@ def upload_pdf(pdf: str,
         content = make_content(pdf)
         metadata = make_metadata(pdf, visible_name, uuidfolder)
 
-        # uploads uuid fullname
-        name = osp.join(path, uid)
-        # upload pdf and if success, write json files
         print(f"Uploading\n\t{osp.basename(pdf)}\n\t as '{folder}/{visible_name}'\n\t uuid {uid}")
-        ret = _rsync_pdf(pdf, name, **_kw)
-        if not ret:
+        ret = _rsync_up(pdf, name=f"{uid}.pdf", **_kw)
+        # upload pdf and if success, write json files
+        if not ret: # generate content and metadata files on device
+            name = osp.join(path, uid)
             ssh_json(content, f"{name}.content", **_kw)
             ssh_json(metadata, f"{name}.metadata", **_kw)
 
@@ -134,37 +133,32 @@ def restart_xochitl(**kwargs) -> int:
     return _run_cmd(cmd, check=True, shell=False)
 
 
-def _rsync_pdf(pdf: str,
-               name: str,
-               **kwargs) -> int:
-    """ functional for main pdf upload"""
-    host, user, _ = get_host_user_path(**_kwargs_get(**kwargs))
-    if not _is_host_reachable(host, packets=2):
-        print (f"host <{host}> is not reachable")
-        return 1
-
-    name = f'{name}.pdf'
-    cmd = ['rsync',
-           '-avzhP',   # archive, verbose, compress, human-readable, partial, progress
-           '--update',  # Skip files that are newer on the receiver
-           pdf, f'{user}@{host}:{name}']
-    return _run_cmd(cmd, check=True, shell=False)
-
 def _rsync_up(fname: str,
-              out_path: Optional[str] = None,
+              sync_args: str = '-avzhP',
+              update: bool = True,
               **kwargs) -> int:
     """  upload file to xochitl path
+    Args
+        fname       (str) file to upload
+        sync_args   (str) ['-avzhP'])
+            archive, verbose, compress, human-readable, partial, progress
+        update      (bool [True]) skip newer files on receiver
+    kwargs
+        name        (str) store with different name than filename
+    default xochitl override
+        host    (str) ['10.11.99.1']
+        user    (str) ['root]
+        path    (str) ['local/share/remarkable/xochitl']
     TODO replace _rsync pdf"""
     host, user, path = get_host_user_path(**_kwargs_get(**kwargs))
+
     if not _is_host_reachable(host, packets=2):
         print (f"host <{host}> is not reachable")
         return 1
-    path = path if out_path is None else out_path
-    name = osp.join(path, osp.basename(fname))
-    cmd = ['rsync',
-           '-avzhP',   # archive, verbose, compress, human-readable, partial, progress
-           '--update',  # Skip files that are newer on the receiver
-           fname, f'{user}@{host}:{name}']
+    name = osp.join(path, osp.basename(kwargs.get('name', fname)))
+    sync_args = (sync_args, '--update') if update else (sync_args,)
+
+    cmd = ['rsync', *sync_args, fname, f'{user}@{host}:{name}']
     return _run_cmd(cmd, check=True, shell=False)
 
 

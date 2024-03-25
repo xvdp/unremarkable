@@ -11,15 +11,21 @@ I wrote these code snippets in order to use the reMarkable tablet similar to its
 Other possible useful functions available through python
 ```python
 from unremarkable import remarkable_backup, export_merged_pdf, upload_pdf # mirrors console commands
-from unremarkable import add_authors, get_annotated, remarkable_name
-# add author names to .content to local backup then upload to remarkable to show in ui
-add_authors(filename, authors=('J. Doe', 'P. Einstein'), year=2122, restart=True) # tablet file must be closed to update
-# returns a list with all annotated files in backup
+from unremarkable import add_authors, pdf_metadata, get_annotated, remarkable_name
+
+# on local backup: add author names to .content
+# upload to remarkable to show authors in UI, tablet file must be closed
+add_authors(filename, authors=('J. Doe', 'P. Einstein'), year=2122, restart=True) 
+
+# on local pdf: add metadata keys to a local pdf
+pdf_metadata(filename, [author], [title], [year], [delete_keys], overwrite=True, kwargs)
+
+# on local backup: return a list with all annotated files in backup
 pprint.pprint(get_annotated())
-# resolve uuid and visible name from uuid or sufficiently unique partial name
+
+# on local backup: resolve uuid and visible name from uuid or sufficiently unique partial name
 remarkable_name("perturbation inactivation")
 [*] ('98934bc7-2278-4e43-b2ac-1b1675690074', 'Perturbation Inactivation Based Adversarial Defense for Face Recognition')
-
 ```
 
 

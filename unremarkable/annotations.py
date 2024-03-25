@@ -1,4 +1,8 @@
 """ annotation to pdf export using reportlab and pypdf
+all local functions on or from backup except
+
+add_authors() on backup, optional upload to pdf
+
 """
 from typing import  Union, Optional, BinaryIO
 import os
@@ -18,7 +22,9 @@ import pypdf
 from .rmscene import SceneLineItemBlock, Line, read_blocks
 from .unremarkable import get_pdf_info, restart_xochitl, _is_uuid, _find_folder, _get_xochitl, _rsync_up
 
-
+##
+# .rm annotation binary files
+#
 def read_rm(data: Union[str, BinaryIO]) -> list:
     """
     .rm reader to to list
@@ -105,7 +111,9 @@ def get_rm_files(root, bare_uuid: bool = False) -> list:
             out = [osp.splitext(osp.basename(f))[0] for f in out]
     return out
 
-
+##
+# .content json files
+#
 def read_content(root: str, rm_files: Optional[tuple] = None, add_all: bool = False) -> dict:
     """ uid.content json files
     content.keys()
@@ -182,8 +190,9 @@ def read_content(root: str, rm_files: Optional[tuple] = None, add_all: bool = Fa
 
     return out
 
+
 def get_annotated(folder: str = "?") -> dict:
-    """
+    """ read .content and .metadata files to find rm files
         return Documents with annotations
     """
     if folder == "?":
@@ -245,6 +254,7 @@ def get_annotated(folder: str = "?") -> dict:
 
     return out
 
+
 def get_name_from_uuid(uid: str) -> str:
     """get visible name from uuid, uuid must exist
     """
@@ -256,6 +266,7 @@ def get_name_from_uuid(uid: str) -> str:
     with open(metadata, 'r', encoding='utf8') as fi:
         t = json.load(fi)
     return t['visibleName']
+
 
 def get_uuid_from_name(name: str,
                        partial: bool = False,
@@ -362,14 +373,12 @@ def get_content_file(uid, xochitl: Optional[str] = None) -> str:
     assert osp.isfile(uid), f"file {uid} not found"
     return uid
 
-###
-# export merged pdf
-#
+
 def remarkable_name(filename, xochitl: Optional[str] = None) -> tuple:
-    """resolve uuid and visible name 
+    """return uuid and visible name 
     Args
-        filename    str if partial name is not sufficiently unique asserts and prints all possible names
-        
+        filename    (str) uuid or partial visible name
+        is not sufficiently unique asserts and prints all possible names
     """
     file_uuid, name, metadata, content, pdf = _gather_uuid_info(filename, xochitl)
     return file_uuid, name
@@ -400,6 +409,9 @@ def _gather_uuid_info(filename, xochitl: Optional[str] = None) -> tuple:
 
     return file_uuid, name, metadata, content, pdf
 
+# patch .content files in remarkable tablet with authors
+# local function on backup -> .content file
+# upload to remarkable -> .content_file
 def add_authors(filename: str,
                 authors: Union[str, tuple],
                 title: Optional[str] = None,
@@ -416,9 +428,10 @@ def add_authors(filename: str,
         year        (int, str) if passed, concat to authors so it shows in xochitl
         upload      (bool [True]) upload to tablet, False: only local file
         restart     (bool [False]) restarts xochitl service
-    Example:
+    Examples:
      add_authors('Learning to Learn', ['S. Fang', 'J. Li', 'X. Lin', 'R. Ji'], year=2021)
-     add_authors('60e7724c-61cc-492d-9d37-cc14430e0efd', ['S. Fang', 'J. Li', 'X. Lin', 'R. Ji'], year=2021)
+     add_authors('60e7724c-61cc-492d-9d37-cc14430e0efd',
+                 ['S. Fang', 'J. Li', 'X. Lin', 'R. Ji'], year=2021)
     """
     file_uuid, name, metadata, content, pdf = _gather_uuid_info(filename, xochitl)
 
@@ -442,8 +455,66 @@ def add_authors(filename: str,
         if restart:
             restart_xochitl()
 
+# rewrite pdfs with metadata , locally
+def pdf_metadata(pdf: str,
+                 author: str,
+                 title: Optional[str] = None,
+                 year: Union[str, int, None] = None,
+                 subject: Optional[str] = None,
+                 keywords: Optional[str] = None,
+                 overwrite: bool = True,
+                 delete_keys: Union[tuple, bool, None] = None,
+                 **kwargs):
+    """
+    Args
+        pdf:        (str) valid pdf
+        author:     (str) author list
+    Optional Args
+        title       (str)
+        year        (int, str)
+        keywords    (str)
+        overwrite   (bool[True])
+        delete_keys (tuple, bool) delete unwanted keys if found 
+    kwargs: in
+        ['Producer', 'CreationDate', 'PTEX.Fullbanner',
+         'Trapped', 'Creator', 'ModDate', 'Style', 'Subject']
+    """
+    _keys = ['/Producer', '/CreationDate', '/PTEX.Fullbanner', '/Author', '/Keywords',
+             '/Trapped', '/Creator', '/ModDate', '/Style', '/Title', '/Subject']
+    reader = pypdf.PdfReader(pdf)
+    writer = pypdf.PdfWriter()
+    metadata = dict(reader.metadata) if reader.metadata is not None else {}
+    # add
+    if year:
+        author = f"{author}, {year}"
+    add_keys = {'/Author': author, "/Title": title, '/Subject': subject, '/Keywords': keywords}
+    add_keys = {k:v for k,v in add_keys.items() if v is not None}
+    # kwargs
+    for key, val in kwargs.items():
+        _key = f"/{key}"
+        if _key in _keys:
+            add_keys[_key] = kwargs[key]
+    for key, val in add_keys.items():
+        metadata[key] = val
 
-# from backup
+    # delete
+    if delete_keys is not None:
+        if delete_keys is True:
+            delete_keys = [k for k in metadata.keys() if k not in add_keys]
+        elif isinstance(delete_keys, str):
+            delete_keys = [delete_keys]
+        for key in delete_keys:
+            if key in metadata:
+                del metadata[key]
+    writer.add_metadata(metadata)
+    # copy pages
+    for page in reader.pages:
+        writer.add_page(page)
+    out_pdf = pdf if overwrite else "_mod".join(osp.splitext(pdf))
+    with open(out_pdf, 'wb') as output_pdf:
+        writer.write(output_pdf)
+
+
 def export_merged_pdf(filename: str,
                       page: Union[int, tuple, bool] = True,
                       out_folder: str = ".",
@@ -566,6 +637,7 @@ get_pdf_info('/home/z/data/reMarkable/xochitl/885a692b-e657-43f3-a6f3-0bc62594f4
     with open(out_name, 'wb') as fi:
         pdf_writer.write(fi)
     print(f"Saved merged pdf to <{out_name}>")
+
 
 
 ###
