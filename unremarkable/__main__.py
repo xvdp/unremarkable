@@ -16,6 +16,7 @@ _G="\033[34m"
 _R="\033[31m"
 _Y="\033[32m"
 _B="\033[36m"
+_M="\033[35m"
 ##
 # console entry points
 #
@@ -154,43 +155,51 @@ def remarkable_help():
         xochitl=""
         isstored=" NOT YET"
 
-    _help = f""" unremarkable console functions to access reMarkable tablet without app.
+    _help = f""" unremarkable: accessreMarkable tablet without app.
     reMarkable tablet {_col}{connected} connected {_A} through USB IP {_col}{ip}{_A}.
     backup folder{_col2}{isstored} stored in ~/.xochitl{xochitl} {_A}
 
-    Console Functions
-        $ {_B}remarkable_backup {_A}<folder> # folder in (existing dir, ?, )
-            back up contents of reMarkable xochitl folder to local machine
-         Args
-            if no folder entry uses local folder 
-            if  ? it searches folder hierarchy for 'xochitl' folder and backs up there if found
-
-        $ {_B}pdf_to_remarkable{_A} <pdf> [<parent folder name>] [--name <file visible name>] [--no_restart]
-            uploads one pdf of all pdfs in a local folder to reMarkable
-         Args
+{_Y}Console Functions{_A}
+    $ {_B}pdf_to_remarkable{_A} <pdf> [<parent folder name>] [--name <file visible name>] [--no_restart]
+        {_G}# upload one pdf of all pdfs in a local folder to reMarkable{_A}
+        Args
             pdf     (str) valid pdf file or *
             parent  (str ['']) destination folder visible name
-         kwargs
+        kwargs
             --name -n (str [None]) visible name, if None: pdfbasename.replace("_"," ") 
-         switches
-            --no_restart -r     default restarts xochitl to refresh UI
+            --no_restart -r   NO ARGS  default restarts xochitl to refresh UI
 
-        $ {_B}remarkable_ls{_A} <local folder> [--dir_type]
-            lists folders and files paired to their uuid names on LOCAL backup
-         Args
-            folder  (str)   in (existing dir, ?, )
-                if no folder entry uses local folder 
-                if  ? it searches folder hierarchy for 'xochitl' folder and backs up there if found
-         switches
-            --dir_type -d   list only folders
+    $ {_B}remarkable_restart  {_G}# restart xochitl service to view upload changes{_A}   
 
-        $ {_B}pdf_info{_A} <local pdf file> [<page number>]
-            returns number of pages, width, height of a pdf in a LOCAL folder
+    $ {_B}remarkable_backup {_A}<folder> # folder in (existing dir, ?, )
+        {_G}# back up reMarkable xochitl to local machine, stores backup folder name to ~/.xochitl file{_A}
+        # if no folder passed: 1. reads '~/.xochitl' 2: searches for 'xochitl/' under curred pwd
 
-        $ {_B}remarkable_export_annotated{_A} <filename> [page] [folder] [name] [xochitl]
-            export annotated pdf from local backup - only line blocks, no text
+    $ {_B}remarkable_ls{_A} <local folder> [--dir_type]
+        {_G}# list folder and file (names, uuid) on reMarkable BACKUP{_A}
+        # if no folder passed: 1. reads '~/.xochitl' 2: searches for 'xochitl/' under curred pwd
+        Args
+            folder  (str)   in (existing dir)  if no folder passed: 1. reads '~/.xochitl' 2: searches for 'xochitl/' under curred pwd
+            --dir_type -d   NO ARGS  list folders only
 
-        $ {_B}remarkable_read_rm{_A} <file.rm>
-            reads and prints .rm file
+    $ {_B}remarkable_export_annotated{_A} <filename> [page] [folder] [name] [xochitl]
+        {_G}# export annotated pdf from reMarkable BACKUP; only version 6 .rm; lines, no text/ WIP{_A}
+
+{_Y}Python{_A}
+    {_M}>>> {_B}from unremarkable import remarkable_name, add_authors, add_pdf_metadata, get_annotated{_A}
+
+    {_G}# resolve uuid and visible name from uuid or sufficiently unique partial name, from reMarkable BACKUP e.g.{_A}
+    {_M}>>> {_B}remarkable_name({_A}"perturbation inactivation"{_B}){_A}
+    [*] ('98934bc7-2278-4e43-b2ac-1b1675690074', 'Perturbation Inactivation Based Adversarial Defense')
+        
+    {_G}# add author names to reMarkable BACKUP .content, then upload to tablet, tablet file must be closed{_A}
+    {_M}>>> {_B}add_authors({_A}filename, authors=('J. Doe', 'P. Ninestein'), year=2122, restart=True{_B}){_A} 
+        
+    {_G}# add author name and other metadata to a LOCAL PDF{_A}
+    {_M}>>> {_B}add_pdf_metadata({_A}filename, author, title=None, year=None, subject=None, delete_keys=(), overwrite=True, **kwargs{_B}){_A} 
+
+    {_G}# list annotated files on reMarkable BACKUP
+    {_M}>>> files = {_B}get_annotated(){_A})
+    {_A}>>> pprint.pprint(files['annotated']{_B} # files['old'] are files without zoomMode - are they v5? untested.
     """
     print (_help)

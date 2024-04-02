@@ -185,8 +185,10 @@ def read_content(root: str, rm_files: Optional[tuple] = None, add_all: bool = Fa
                 data['redirectionPageMap'] = list(range(0, len(data['pages'])))
             for i, page in enumerate(data['pages']):
                 if page in rm_ids:
-                    out['pages'] += [{"rm": rm_files[rm_ids.index(page)],
-                                     "number": data['redirectionPageMap'][i]}]
+                    j = i if i not in data['redirectionPageMap'] else data['redirectionPageMap'][i]
+                    if i < len(data['redirectionPageMap']):
+                        out['pages'] += [{"rm": rm_files[rm_ids.index(page)],
+                                        "number": j}]
 
     return out
 
@@ -456,15 +458,15 @@ def add_authors(filename: str,
             restart_xochitl()
 
 # rewrite pdfs with metadata , locally
-def pdf_metadata(pdf: str,
-                 author: str,
-                 title: Optional[str] = None,
-                 year: Union[str, int, None] = None,
-                 subject: Optional[str] = None,
-                 keywords: Optional[str] = None,
-                 overwrite: bool = True,
-                 delete_keys: Union[tuple, bool, None] = None,
-                 **kwargs):
+def add_pdf_metadata(pdf: str,
+                     author: str,
+                     title: Optional[str] = None,
+                     year: Union[str, int, None] = None,
+                     subject: Optional[str] = None,
+                     keywords: Optional[str] = None,
+                     overwrite: bool = True,
+                     delete_keys: Union[tuple, bool, None] = None,
+                     **kwargs):
     """
     Args
         pdf:        (str) valid pdf

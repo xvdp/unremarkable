@@ -10,17 +10,24 @@ I wrote these code snippets in order to use the reMarkable tablet similar to its
 
 Other possible useful functions available through python
 ```python
- # mirrors of console commands
+#
+# console command's mirrors
 from unremarkable import remarkable_backup, export_annotated_pdf, upload_pdf
 
 # upload pdf to remarkable folder
 upload_pdf('Topology_Second_Edition.pdf', 'Maths')
 
+#
 # python only
 from unremarkable import add_authors, pdf_metadata, get_annotated, remarkable_name
 
+# on local backup: resolve uuid and visible name from uuid or sufficiently unique partial name
+remarkable_name("perturbation inactivation")
+[*] ('98934bc7-2278-4e43-b2ac-1b1675690074', 'Perturbation Inactivation Based Adversarial Defense for Face Recognition')
+
 # on local backup: add author names to .content
 # upload to remarkable to show authors in UI, tablet file must be closed
+# filename can be uuid, or partial unique name, use `remarkable_name(filename)` to check
 add_authors(filename, authors=('J. Doe', 'P. Einstein'), year=2122, restart=True) 
 
 # on local pdf: add metadata keys to a local pdf
@@ -29,9 +36,7 @@ pdf_metadata(filename, [author], [title], [year], [delete_keys], overwrite=True,
 # on local backup: return a list with all annotated files in backup
 pprint.pprint(get_annotated())
 
-# on local backup: resolve uuid and visible name from uuid or sufficiently unique partial name
-remarkable_name("perturbation inactivation")
-[*] ('98934bc7-2278-4e43-b2ac-1b1675690074', 'Perturbation Inactivation Based Adversarial Defense for Face Recognition')
+
 ```
 
 
