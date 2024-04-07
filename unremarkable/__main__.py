@@ -153,17 +153,18 @@ def remarkable_help():
     else:
         _col2 = _R
         xochitl=""
-        isstored=" NOT YET"
+        isstored="NO "
+    # backup folder NOT YET stored in ~/.xochitl
 
-    _help = f""" unremarkable: accessreMarkable tablet without app.
-    reMarkable tablet {_col}{connected} connected {_A} through USB IP {_col}{ip}{_A}.
-    backup folder{_col2}{isstored} stored in ~/.xochitl{xochitl} {_A}
+    _help = f"""https://github.com/xvdp/unremarkable  access to reMarkable tablet without app.
+    reMarkable {_col}{connected} connected {_A} through USB IP {_col}{ip}{_A}.
+    {_col2}{isstored}backup folder found in ~/.xochitl {_col}{xochitl} {_A}
 
 {_Y}Console Functions{_A}
     $ {_B}pdf_to_remarkable{_A} <pdf> [<parent folder name>] [--name <file visible name>] [--no_restart]
         {_G}# upload one pdf of all pdfs in a local folder to reMarkable{_A}
         Args
-            pdf     (str) valid pdf file or *
+            pdf     (str) valid pdf file or "*"
             parent  (str ['']) destination folder visible name
         kwargs
             --name -n (str [None]) visible name, if None: pdfbasename.replace("_"," ") 
@@ -172,14 +173,13 @@ def remarkable_help():
     $ {_B}remarkable_restart  {_G}# restart xochitl service to view upload changes{_A}   
 
     $ {_B}remarkable_backup {_A}<folder> # folder in (existing dir, ?, )
-        {_G}# back up reMarkable xochitl to local machine, stores backup folder name to ~/.xochitl file{_A}
+        {_G}# back up reMarkable local,  folder name stored to ~/.xochitl file{_A}
         # if no folder passed: 1. reads '~/.xochitl' 2: searches for 'xochitl/' under curred pwd
 
     $ {_B}remarkable_ls{_A} <local folder> [--dir_type]
         {_G}# list folder and file (names, uuid) on reMarkable BACKUP{_A}
-        # if no folder passed: 1. reads '~/.xochitl' 2: searches for 'xochitl/' under curred pwd
         Args
-            folder  (str)   in (existing dir)  if no folder passed: 1. reads '~/.xochitl' 2: searches for 'xochitl/' under curred pwd
+            folder (str)   if no dir: 1. cat '~/.xochitl' 2: find . -type d -name 'xochitl/'
             --dir_type -d   NO ARGS  list folders only
 
     $ {_B}remarkable_export_annotated{_A} <filename> [page] [folder] [name] [xochitl]
@@ -193,8 +193,9 @@ def remarkable_help():
     [*] ('98934bc7-2278-4e43-b2ac-1b1675690074', 'Perturbation Inactivation Based Adversarial Defense')
         
     {_G}# add author names to reMarkable BACKUP .content, then upload to tablet, tablet file must be closed{_A}
-    {_M}>>> {_B}add_authors({_A}filename, authors=('J. Doe', 'P. Ninestein'), year=2122, restart=True{_B}){_A} 
-        
+    {_M}>>> {_B}add_authors({_A}filename, authors, title=None, year=None, override=False, upload=True, restart=True{_B}){_A} 
+
+
     {_G}# add author name and other metadata to a LOCAL PDF{_A}
     {_M}>>> {_B}add_pdf_metadata({_A}filename, author, title=None, year=None, subject=None, delete_keys=(), overwrite=True, **kwargs{_B}){_A} 
 

@@ -19,7 +19,7 @@ upload_pdf('Topology_Second_Edition.pdf', 'Maths')
 
 #
 # python only
-from unremarkable import add_authors, pdf_metadata, get_annotated, remarkable_name
+from unremarkable import add_authors, add_pdf_metadata, get_annotated, remarkable_name
 
 # on local backup: resolve uuid and visible name from uuid or sufficiently unique partial name
 remarkable_name("perturbation inactivation")
@@ -30,8 +30,8 @@ remarkable_name("perturbation inactivation")
 # filename can be uuid, or partial unique name, use `remarkable_name(filename)` to check
 add_authors(filename, authors=('J. Doe', 'P. Einstein'), year=2122, restart=True) 
 
-# on local pdf: add metadata keys to a local pdf
-pdf_metadata(filename, [author], [title], [year], [delete_keys], overwrite=True, kwargs)
+# on local pdf: add metadata, custom metadata, delete keys, only seletect pages
+add_pdf_metadata(filename, author=None, title=None, year=None, delete_keys=None, suffix=False, custom_pages=None, **kwargs)
 
 # on local backup: return a list with all annotated files in backup
 pprint.pprint(get_annotated())

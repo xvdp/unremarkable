@@ -500,7 +500,8 @@ def get_pdf_info(pdf: str, page: Optional[int] = None):
         else:
             height = red.pages[page % num].mediabox.height
             width = red.pages[page % num].mediabox.width
-    return {'pages':num, 'width':width, 'height':height}
+        metadata = dict(red.metadata) if red.metadata is not None else {}
+    return {'pages':num, 'width':width, 'height':height, **metadata}
 
 
 def get_pdfs(folder: str, key: Optional[str] = None) -> list:

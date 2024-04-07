@@ -5,6 +5,7 @@ add_authors() on backup, optional upload to pdf
 
 """
 from typing import  Union, Optional, BinaryIO
+import time
 import os
 import os.path as osp
 import json
@@ -20,7 +21,8 @@ import pypdf
 
 # .rm version 6 api
 from .rmscene import SceneLineItemBlock, Line, read_blocks
-from .unremarkable import get_pdf_info, restart_xochitl, _is_uuid, _find_folder, _get_xochitl, _rsync_up
+from .unremarkable import get_pdf_info, restart_xochitl, _is_uuid, _find_folder, \
+    _get_xochitl, _rsync_up
 
 ##
 # .rm annotation binary files
@@ -376,23 +378,33 @@ def get_content_file(uid, xochitl: Optional[str] = None) -> str:
     return uid
 
 
-def remarkable_name(filename, xochitl: Optional[str] = None) -> tuple:
+def remarkable_name(filename,
+                    xochitl: Optional[str] = None,
+                    ignore_case: bool = True,
+                    partial: bool = True) -> tuple:
     """return uuid and visible name 
     Args
         filename    (str) uuid or partial visible name
         is not sufficiently unique asserts and prints all possible names
     """
-    file_uuid, name, metadata, content, pdf = _gather_uuid_info(filename, xochitl)
+    file_uuid, name, metadata, content, pdf = _gather_uuid_info(filename, xochitl=xochitl,
+                                                                ignore_case=ignore_case,
+                                                                partial=partial)
     return file_uuid, name
 
-def _gather_uuid_info(filename, xochitl: Optional[str] = None) -> tuple:
+def _gather_uuid_info(filename,
+                      xochitl: Optional[str] = None,
+                      ignore_case: bool = True,
+                      partial: bool = True) -> tuple:
     if xochitl is None:
         xochitl = _get_xochitl()
     if not _is_uuid(osp.basename(osp.splitext(filename)[0])):
         name = filename
-        _fname = get_uuid_from_name(filename, xochitl=xochitl)
+        # try to find exact name first
+        _fname = get_uuid_from_name(filename, xochitl=xochitl, ignore_case=False, partial=False)
         if _fname is None:
-            _fname = get_uuid_from_name(filename, xochitl=xochitl, partial=True, ignore_case=True)
+            _fname = get_uuid_from_name(filename, xochitl=xochitl, partial=partial,
+                                        ignore_case=ignore_case)
             assert len(_fname) == 1, f"pass exact filename, <{filename}> not found,{_fname}"
             name, _fname = _fname[0]
         metadata = _fname
@@ -418,6 +430,7 @@ def add_authors(filename: str,
                 authors: Union[str, tuple],
                 title: Optional[str] = None,
                 year: Union[str, int, None] = None,
+                tags: Union[tuple, str, None] = None,
                 xochitl: Optional[str] = None,
                 override: bool = False,
                 upload: bool = True,
@@ -428,6 +441,7 @@ def add_authors(filename: str,
         authors     (str, tuple)
         title       (str [None]) only writes if override set to True
         year        (int, str) if passed, concat to authors so it shows in xochitl
+        tags        (str, tuple) -
         upload      (bool [True]) upload to tablet, False: only local file
         restart     (bool [False]) restarts xochitl service
     Examples:
@@ -450,6 +464,16 @@ def add_authors(filename: str,
     data['documentMetadata']['authors'] = list(authors)
     if title is not None and (override or 'title' not in data['documentMetadata']):
         data['documentMetadata']['title'] = title
+
+    if tags is not None:
+        tags = tags if isinstance(tags, tuple) else (tags,)
+        if 'tags' not in content:
+            data['tags'] = []
+        names = [tag['name'] for tag in data['tags']]
+        for tag in tags:
+            if tag not in names:
+                data['tags'] += {'name':tag, 'timestamp':int(time.time())}
+
     with open(content, 'w', encoding='utf8') as _fi:
         json.dump(data, _fi, indent = 4)
     if upload:
@@ -459,13 +483,14 @@ def add_authors(filename: str,
 
 # rewrite pdfs with metadata , locally
 def add_pdf_metadata(pdf: str,
-                     author: str,
+                     author: Optional[str] = None,
                      title: Optional[str] = None,
                      year: Union[str, int, None] = None,
                      subject: Optional[str] = None,
                      keywords: Optional[str] = None,
-                     overwrite: bool = True,
+                     suffix: Union[bool, str] = False,
                      delete_keys: Union[tuple, bool, None] = None,
+                     custom_pages: Union[int, tuple, list, range, None] = None,
                      **kwargs):
     """
     Args
@@ -475,27 +500,48 @@ def add_pdf_metadata(pdf: str,
         title       (str)
         year        (int, str)
         keywords    (str)
-        overwrite   (bool[True])
-        delete_keys (tuple, bool) delete unwanted keys if found 
-    kwargs: in
-        ['Producer', 'CreationDate', 'PTEX.Fullbanner',
-         'Trapped', 'Creator', 'ModDate', 'Style', 'Subject']
+        suffix      (str, bool[False]) # if True add '_mod', if str '_{suffix}'
+        delete_keys (str, tuple, bool) delete unwanted keys if found 
+        custom_pages (int, tuple, range)
+    kwargs: 
+        any custom metadata keys 
+
+    Example:
+    # add only custom metadata keys: will be saved as
+    >>> metadata = {'Species': 'Extra-Terrestrial', # -> '/Species'
+                    'Reference': '8dc72c41-b276-403b-81ff' # -> '/Reference'
+                    }
+    >>> add_pdf_metadata(filename, author=None, **metadata)
+
+    # delete some existing metadata
+    >>> delete_keys =['/CreationDate', '/Producer']
+    >>> add_pdf_metadata(filename, delete_keys=delete_keys)
+
+    # remove first pages and save new file with suffix 
+    >>> for f in pdf_folder:
+    >>>     pages = get_pdf_info(pdfs[0])['pages']
+    >>>     add_pdf_metadata(f, custom_pages=range(1,pages), suffix="nocover")
+
     """
-    _keys = ['/Producer', '/CreationDate', '/PTEX.Fullbanner', '/Author', '/Keywords',
-             '/Trapped', '/Creator', '/ModDate', '/Style', '/Title', '/Subject']
+    if not any([author, title, year, subject, keywords, delete_keys, custom_pages, kwargs]):
+        print("no args passed, exiting")
+        return None
+    assert osp.isfile(pdf), f"file not found {pdf}"
+
     reader = pypdf.PdfReader(pdf)
     writer = pypdf.PdfWriter()
     metadata = dict(reader.metadata) if reader.metadata is not None else {}
-    # add
-    if year:
+
+    # add standard keys
+    if year is not None and author is not None:
         author = f"{author}, {year}"
     add_keys = {'/Author': author, "/Title": title, '/Subject': subject, '/Keywords': keywords}
     add_keys = {k:v for k,v in add_keys.items() if v is not None}
-    # kwargs
+
+    # add custom keys from kwargs
     for key, val in kwargs.items():
         _key = f"/{key}"
-        if _key in _keys:
-            add_keys[_key] = kwargs[key]
+        add_keys[_key] = kwargs[key]
     for key, val in add_keys.items():
         metadata[key] = val
 
@@ -508,13 +554,31 @@ def add_pdf_metadata(pdf: str,
         for key in delete_keys:
             if key in metadata:
                 del metadata[key]
+
+    # add metadata field
     writer.add_metadata(metadata)
+
     # copy pages
-    for page in reader.pages:
-        writer.add_page(page)
-    out_pdf = pdf if overwrite else "_mod".join(osp.splitext(pdf))
+    if custom_pages is None:
+        custom_pages = range(len(reader.pages))
+    elif isinstance(custom_pages, int):
+        custom_pages = (custom_pages,)
+    for i, page in enumerate(reader.pages):
+        if i in custom_pages:
+            writer.add_page(page)
+
+    if suffix:
+        if isinstance(suffix, str):
+            suffix = suffix if suffix[0] == "_" else f"_{suffix}"
+        else:
+            suffix = "_mod"
+        out_pdf = suffix.join(osp.splitext(pdf))
+    else:
+        out_pdf = pdf
+
     with open(out_pdf, 'wb') as output_pdf:
         writer.write(output_pdf)
+        print(f"Writing file {out_pdf}")
 
 
 def export_annotated_pdf(filename: str,
