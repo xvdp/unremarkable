@@ -1,2 +1,3 @@
 pypdf
 reportlab
+packaging

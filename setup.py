@@ -20,7 +20,7 @@ def _requirements():
 
 setup(
     name=_NAME,
-    version=_set_version("0.0.6"),
+    version=_set_version("0.0.7"),
     packages=find_packages(),
     install_requires=_requirements(),
     entry_points={

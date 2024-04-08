@@ -483,34 +483,6 @@ def build_file_graph(folder: Optional[str] = None, dir_type: bool = False) -> Op
 ##
 # miscelaneous
 #
-def get_pdf_info(pdf: str, page: Optional[int] = None):
-    """ get number of pages and page sizes
-    
-    """
-    with open(pdf, 'rb') as _fi:
-        red = pypdf.PdfReader(_fi)
-        num = len(red.pages)
-        if page is None:
-            height = [p.mediabox.height for p in red.pages]
-            width = [p.mediabox.width for p in red.pages]
-            if len(set(height)) == 1:
-                height = height[0]
-            if len(set(width)) == 1:
-                width = width[0]
-        else:
-            height = red.pages[page % num].mediabox.height
-            width = red.pages[page % num].mediabox.width
-        metadata = dict(red.metadata) if red.metadata is not None else {}
-    return {'pages':num, 'width':width, 'height':height, **metadata}
-
-
-def get_pdfs(folder: str, key: Optional[str] = None) -> list:
-    """ get pdfs from local folder
-    """
-    pdfs = [f.path for f in os.scandir(folder) if f.name.endswith(".pdf")]
-    if key:
-        pdfs = [f for f in pdfs if key in f]
-    return pdfs
 
 def _find_folder(name: str, root: str = '.') -> Optional[str]:
     """recursively finds  folder of a given name"""

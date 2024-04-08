@@ -6,9 +6,10 @@ import argparse
 import os.path as osp
 import pprint
 
-from .unremarkable import backup_tablet, upload_pdf, build_file_graph, get_pdf_info, \
+from .unremarkable import backup_tablet, upload_pdf, build_file_graph, \
     _is_host_reachable, _get_xochitl, restart_xochitl
 from .annotations import export_annotated_pdf
+from .pdf import get_pdf_info
 from . import rmscene
 
 _A="\033[0m"
@@ -104,7 +105,7 @@ def remarkable_export_annotated():
     """ console entry point merging pdf and rmscene
     Args
         file     (str) uuid in xochitl or visibleName - exported to local backup
-        page     (int, tuple [None]) None export all
+        pages    (int, tuple [None]) None export all
         folder   (str ['.']) output folder
         out_name (str [None]) if None -> visible_name.replace(" ", "_")+".pdf"
         xochitl  (str [None]) if None, reads ~/.xochitl for local bakcupd folder
@@ -156,51 +157,43 @@ def remarkable_help():
         isstored="NO "
     # backup folder NOT YET stored in ~/.xochitl
 
-    _help = f"""https://github.com/xvdp/unremarkable  access to reMarkable tablet without app.
+    _help = f"""{_Y}https://github.com/xvdp/unremarkable{_A}  access reMarkable without app.
     reMarkable {_col}{connected} connected {_A} through USB IP {_col}{ip}{_A}.
     {_col2}{isstored}backup folder found in ~/.xochitl {_col}{xochitl} {_A}
 
-{_Y}Console Functions{_A}
-    $ {_B}pdf_to_remarkable{_A} <pdf> [<parent folder name>] [--name <file visible name>] [--no_restart]
+{_Y}Console{_A}
+    $ {_B}pdf_to_remarkable{_A} <pdf> [visible folder name] [-n, --name <file visible name>] [-r, --no_restart]
         {_G}# upload one pdf of all pdfs in a local folder to reMarkable{_A}
-        Args
-            pdf     (str) valid pdf file or "*"
-            parent  (str ['']) destination folder visible name
-        kwargs
-            --name -n (str [None]) visible name, if None: pdfbasename.replace("_"," ") 
-            --no_restart -r   NO ARGS  default restarts xochitl to refresh UI
-
+        Args        pdf     (str) valid pdf file or "*"
+        Optional    parent  (str ['']) visible folder name in remarkable
+        kwargs      --name -n (str [None]) visible name | default pdfbasename.replace("_"," ") 
+                    --no_restart -r   NO ARGS  | default restart xochitl to refresh UI
     $ {_B}remarkable_restart  {_G}# restart xochitl service to view upload changes{_A}   
-
-    $ {_B}remarkable_backup {_A}<folder> # folder in (existing dir, ?, )
+    $ {_B}remarkable_backup {_A}[folder] # folder in (existing_dir, ? )
         {_G}# back up reMarkable local,  folder name stored to ~/.xochitl file{_A}
         # if no folder passed: 1. reads '~/.xochitl' 2: searches for 'xochitl/' under curred pwd
-
-    $ {_B}remarkable_ls{_A} <local folder> [--dir_type]
+    $ {_B}remarkable_ls{_A} <local folder> [-d, --dir_type]
         {_G}# list folder and file (names, uuid) on reMarkable BACKUP{_A}
-        Args
-            folder (str)   if no dir: 1. cat '~/.xochitl' 2: find . -type d -name 'xochitl/'
-            --dir_type -d   NO ARGS  list folders only
-
+        Args        folder (str)   if no dir: 1. cat '~/.xochitl' 2: find . -type d -name 'xochitl/'
+        Optional    --dir_type -d   NO ARGS  list folders only | deault folders and files
     $ {_B}remarkable_export_annotated{_A} <filename> [page] [folder] [name] [xochitl]
         {_G}# export annotated pdf from reMarkable BACKUP; only version 6 .rm; lines, no text/ WIP{_A}
+        Args        filename    uuid or suficiently unique partial visible name
+        Optional    page        int,tuple selected page or pages only | default all
+                    folder      local folder | default current
+                    name        output name | default visibleName
+                    xochitl     backup folder | default cat ~/.xochitl
 
 {_Y}Python{_A}
     {_M}>>> {_B}from unremarkable import remarkable_name, add_authors, add_pdf_metadata, get_annotated{_A}
-
-    {_G}# resolve uuid and visible name from uuid or sufficiently unique partial name, from reMarkable BACKUP e.g.{_A}
-    {_M}>>> {_B}remarkable_name({_A}"perturbation inactivation"{_B}){_A}
-    [*] ('98934bc7-2278-4e43-b2ac-1b1675690074', 'Perturbation Inactivation Based Adversarial Defense')
-        
-    {_G}# add author names to reMarkable BACKUP .content, then upload to tablet, tablet file must be closed{_A}
+    {_M}>>> {_B}remarkable_name({_A}<partial visbilbe name or uuid>{_B}){_A} -> tuple(uuid, visible name)
+        {_G}# return (uuid, visible name) from uuid or sufficiently unique partial name, from reMarkable BACKUP e.g.{_A}
     {_M}>>> {_B}add_authors({_A}filename, authors, title=None, year=None, override=False, upload=True, restart=True{_B}){_A} 
-
-
-    {_G}# add author name and other metadata to a LOCAL PDF{_A}
-    {_M}>>> {_B}add_pdf_metadata({_A}filename, author, title=None, year=None, subject=None, delete_keys=(), overwrite=True, **kwargs{_B}){_A} 
-
-    {_G}# list annotated files on reMarkable BACKUP
-    {_M}>>> files = {_B}get_annotated(){_A})
-    {_A}>>> pprint.pprint(files['annotated']{_B} # files['old'] are files without zoomMode - are they v5? untested.
+        {_G}# add author names to reMarkable BACKUP .content, then upload to tablet, tablet file must be closed{_A}
+    {_M}>>> {_B}add_pdf_metadata({_A}filename, author=None, title=None, year=None, subject=None, delete_keys=(), suffix=False, custom_pages=None, **kwargs{_B}){_A} 
+        {_G}# add metadata keys (author, title, year, subject, **kwargs), delete keys, add suffix, export custom page tuple/ range to LOCAL PDF{_A}
+    {_M}>>> files = {_B}get_annotated(){_A} -> dict('annotated':[], 'old':[])
+        {_G}# files with annotations on reMarkable BACKUP,  'old' are files without zoomMode - are they v5? WIP.{_A}
+    >>> pprint.pprint(files['annotated']
     """
     print (_help)
