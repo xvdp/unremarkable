@@ -306,7 +306,7 @@ def make_content(pdf):
         red = pypdf.PdfReader(_fi)
         num = len(red.pages)
         orientation = 'landscape'
-        if red.pages[1].mediabox.height > red.pages[1].mediabox.width:
+        if red.pages[0].mediabox.height > red.pages[0].mediabox.width:
             orientation = 'portrait'
     size = os.stat(pdf).st_size
 

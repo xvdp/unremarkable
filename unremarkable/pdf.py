@@ -4,7 +4,9 @@ pdf utilities
 from typing import Optional, Union
 import os
 import os.path as osp
+from pprint import pprint
 import pypdf
+from pybtex.database import parse_file, parse_string
 
 # rewrite pdfs with metadata , locally
 def add_pdf_metadata(pdf: str,
@@ -15,19 +17,23 @@ def add_pdf_metadata(pdf: str,
                      keywords: Optional[str] = None,
                      suffix: Union[bool, str] = False,
                      delete_keys: Union[tuple, bool, None] = None,
-                     custom_pages: Union[int, tuple, list, range, None] = None,
+                     custom_pages: Union[int, tuple, list, range, slice, None] = None,
+                     bibtex: Optional[str] = None,
+                     bib_format: str = 'bibtex',
                      **kwargs):
     """
     Args
-        pdf:        (str) valid pdf
-        author:     (str) author list
+        pdf:         (str) valid pdf
+        author:      (str) author list
     Optional Args
-        title       (str)
-        year        (int, str)
-        keywords    (str)
-        suffix      (str, bool[False]) # if True add '_mod', if str '_{suffix}'
-        delete_keys (str, tuple, bool) delete unwanted keys if found 
-        custom_pages (int, tuple, range)
+        title        (str)
+        year         (int, str)
+        keywords     (str)
+        suffix       (str, bool[False]) # if True add '_mod', if str '_{suffix}'
+        delete_keys  (str, tuple, bool) delete unwanted keys if found 
+        custom_pages (int, tuple, range, slice)
+        bibtex       (str) bibtex file, or bibtex string
+        bib_format   (str ['bibtex']) if bibtex passed as string, spec format
     kwargs: 
         any custom metadata keys 
 
@@ -46,8 +52,15 @@ def add_pdf_metadata(pdf: str,
     >>> for f in pdf_folder:
     >>>     pages = get_pdf_info(pdfs[0])['pages']
     >>>     add_pdf_metadata(f, custom_pages=range(1,pages), suffix="nocover")
+
+    # add bibtex to custom data
+    >>> for f in pdf_folder:
+    >>>     add_pdf_metadata(filename.pdf, bibtex=filename.bib)
+    # see bibtext
+    $ pdfinfo filename.pdf -custom
+
     """
-    if not any([author, title, year, subject, keywords, delete_keys, custom_pages, kwargs]):
+    if not any([author, title, year, subject, keywords, delete_keys, custom_pages, bibtex, kwargs]):
         print("no args passed, exiting")
         return None
     assert osp.isfile(pdf), f"file not found {pdf}"
@@ -69,6 +82,14 @@ def add_pdf_metadata(pdf: str,
     for key, val in add_keys.items():
         metadata[key] = val
 
+    if isinstance (bibtex, str):
+        if osp.isfile(bibtex):
+            bibtex = parse_file(bibtex).to_string('bibtex')
+        else:
+            bibtex = parse_string(bibtex, bib_format=bib_format).to_string('bibtex')
+        print(bibtex)
+        metadata['/Bibtex'] = bibtex
+
     # delete
     if delete_keys is not None:
         if delete_keys is True:
@@ -87,6 +108,8 @@ def add_pdf_metadata(pdf: str,
         custom_pages = range(len(reader.pages))
     elif isinstance(custom_pages, int):
         custom_pages = (custom_pages,)
+    elif isinstance(custom_pages, slice):
+        custom_pages = range(len(reader.pages))[custom_pages]
     for i, page in enumerate(reader.pages):
         if i in custom_pages:
             writer.add_page(page)
@@ -104,10 +127,17 @@ def add_pdf_metadata(pdf: str,
         writer.write(output_pdf)
         print(f"Writing file {out_pdf}")
 
-def get_pdf_info(pdf: str, page: Optional[int] = None) -> dict:
+def get_pdf_info(pdf: str, page: Optional[int] = None, verbose: bool = False) -> Optional[dict]:
     """ {'pages':<int>, 'height': <float, int, list>, 'width':<float, int, list>,
          **pdf.metadata}
+    Args
+        pdf     (str)
+        page    (int [None]) page number to get info from / if w and h vary
+        verbose (bool [Fales]) if True pprint() and return None
+
+    linux native pdfinfo is more complete, this is for internal use
     """
+    assert osp.isfile(pdf)
     with open(pdf, 'rb') as _fi:
         red = pypdf.PdfReader(_fi)
         num = len(red.pages)
@@ -117,25 +147,18 @@ def get_pdf_info(pdf: str, page: Optional[int] = None) -> dict:
             if len(set(height)) == 1 and len(set(width)) == 1:
                 height = height[0]
                 width = width[0]
-            # else:
-            #     _height = {}
-            #     _width = {}
-            #     for i, h in enumerate(height):
-            #         w = width[i]
-            #         if h not in _height:
-            #             _height[h] = []
-            #         _height[h] += [i]
-            #         if w not in _width:
-            #             _width[w] = []
-            #         _width[w] += [i]
-            #     height = _height
-            #     width = _width
-
         else:
             height = red.pages[page % num].mediabox.height
             width = red.pages[page % num].mediabox.width
         metadata = dict(red.metadata) if red.metadata is not None else {}
-    return {'pages':num, 'width':width, 'height':height, **metadata}
+    out = {'pages':num, 'width':width, 'height':height, **metadata}
+    if verbose:
+        if '/Bibtex' in out:
+            bibtex = out.pop('/Bibtex')
+        pprint(out)
+        print(f"\n/Bibtex\n{bibtex}")
+        return None
+    return out
 
 
 def get_pdfs(folder: str, key: Optional[str] = None) -> list:

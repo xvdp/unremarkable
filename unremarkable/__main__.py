@@ -99,7 +99,7 @@ def pdf_info():
         print(f"pass valid .pdf file, got <{args.pdf}> isfile: {osp.isfile(args.pdf)}")
         help(pdf_info)
     else:
-        print(get_pdf_info(args.pdf, args.page))
+        get_pdf_info(args.pdf, args.page, verbose=True)
 
 def remarkable_export_annotated():
     """ console entry point merging pdf and rmscene
@@ -159,7 +159,7 @@ def remarkable_help():
 
     _help = f"""{_Y}https://github.com/xvdp/unremarkable{_A}  access reMarkable without app.
     reMarkable {_col}{connected} connected {_A} through USB IP {_col}{ip}{_A}.
-    {_col2}{isstored}backup folder found in ~/.xochitl {_col}{xochitl} {_A}
+    {_col2}{isstored}backup folder found in ~/.xochitl {_G}{xochitl} {_A}
 
 {_Y}Console{_A}
     $ {_B}pdf_to_remarkable{_A} <pdf> [visible folder name] [-n, --name <file visible name>] [-r, --no_restart]
@@ -172,6 +172,7 @@ def remarkable_help():
     $ {_B}remarkable_backup {_A}[folder] # folder in (existing_dir, ? )
         {_G}# back up reMarkable local,  folder name stored to ~/.xochitl file{_A}
         # if no folder passed: 1. reads '~/.xochitl' 2: searches for 'xochitl/' under curred pwd
+    {_Y}from remarkable backup{_A}
     $ {_B}remarkable_ls{_A} <local folder> [-d, --dir_type]
         {_G}# list folder and file (names, uuid) on reMarkable BACKUP{_A}
         Args        folder (str)   if no dir: 1. cat '~/.xochitl' 2: find . -type d -name 'xochitl/'
@@ -183,6 +184,7 @@ def remarkable_help():
                     folder      local folder | default current
                     name        output name | default visibleName
                     xochitl     backup folder | default cat ~/.xochitl
+    
 
 {_Y}Python{_A}
     {_M}>>> {_B}from unremarkable import remarkable_name, add_authors, add_pdf_metadata, get_annotated{_A}
@@ -190,8 +192,9 @@ def remarkable_help():
         {_G}# return (uuid, visible name) from uuid or sufficiently unique partial name, from reMarkable BACKUP e.g.{_A}
     {_M}>>> {_B}add_authors({_A}filename, authors, title=None, year=None, override=False, upload=True, restart=True{_B}){_A} 
         {_G}# add author names to reMarkable BACKUP .content, then upload to tablet, tablet file must be closed{_A}
-    {_M}>>> {_B}add_pdf_metadata({_A}filename, author=None, title=None, year=None, subject=None, delete_keys=(), suffix=False, custom_pages=None, **kwargs{_B}){_A} 
+    {_M}>>> {_B}add_pdf_metadata({_A}filename, author=None, title=None, year=None, subject=None, delete_keys=(), suffix=False, custom_pages=None, bibtex=None, **kwargs{_B}){_A} 
         {_G}# add metadata keys (author, title, year, subject, **kwargs), delete keys, add suffix, export custom page tuple/ range to LOCAL PDF{_A}
+        {_G}# arg bibgex can pass a .bib file name or a string containing bibtex formated info{_A}
     {_M}>>> files = {_B}get_annotated(){_A} -> dict('annotated':[], 'old':[])
         {_G}# files with annotations on reMarkable BACKUP,  'old' are files without zoomMode - are they v5? WIP.{_A}
     >>> pprint.pprint(files['annotated']
