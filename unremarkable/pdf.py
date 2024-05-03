@@ -24,7 +24,7 @@ def add_pdf_metadata(pdf: str,
     """
     Args
         pdf:         (str) valid pdf
-        author:      (str) author list
+
     Optional Args
         title        (str)
         year         (int, str)
@@ -68,6 +68,13 @@ def add_pdf_metadata(pdf: str,
     reader = pypdf.PdfReader(pdf)
     writer = pypdf.PdfWriter()
     metadata = dict(reader.metadata) if reader.metadata is not None else {}
+
+    author_aliases = ['authors', 'Author']
+    if author is None:
+        for a in author_aliases:
+            if a in kwargs:
+                author = kwargs.pop(a)
+                break
 
     # add standard keys
     if year is not None and author is not None:
@@ -126,6 +133,36 @@ def add_pdf_metadata(pdf: str,
     with open(out_pdf, 'wb') as output_pdf:
         writer.write(output_pdf)
         print(f"Writing file {out_pdf}")
+
+def metadata_from_bib(pdf: str,
+                      bib: str,
+                      custom_pages: Union[int, tuple, list, range, slice, None] = None,
+                      delete_keys: Union[tuple, bool, None] = None,
+                      **kwargs):
+    """ add metadata and bibtex to pdf
+    """
+    assert osp.isfile(pdf), f"pdf not found {pdf}"
+    if osp.isfile(bib):
+        bib = parse_file(bib)
+    else:
+        bib = parse_string(bib, bib_format='bibtex')
+
+    nbentries = len(bib.entries.values())
+    assert nbentries == 1, f"expected 1 bib entry, got {nbentries}"
+
+    authors = []
+    for entry in bib.entries.values():
+        for author in entry.persons['author']:
+            fn = ".".join([f[0] for f in author.first_names])
+            ln = " ".join([f for f in author.last_names])
+            authors.append(f"{fn}. {ln}")
+        year = entry.fields.get('year', '')
+        title = entry.fields.get('title', None)
+        if year:
+            authors = ' '.join([', '.join(authors), year])
+    add_pdf_metadata(pdf, author=authors, title=title, bibtex=bib.to_string('bibtex'),
+                     custom_pages=custom_pages, delete_keys=delete_keys, **kwargs)
+
 
 def get_pdf_info(pdf: str, page: Optional[int] = None, verbose: bool = False) -> Optional[dict]:
     """ {'pages':<int>, 'height': <float, int, list>, 'width':<float, int, list>,

@@ -9,7 +9,7 @@ import pprint
 from .unremarkable import backup_tablet, upload_pdf, build_file_graph, \
     _is_host_reachable, _get_xochitl, restart_xochitl
 from .annotations import export_annotated_pdf
-from .pdf import get_pdf_info
+from .pdf import get_pdf_info, metadata_from_bib
 from . import rmscene
 
 _A="\033[0m"
@@ -35,6 +35,7 @@ def remarkable_backup():
     args = parser.parse_args()
     backup_tablet(args.folder)
 
+
 def pdf_to_remarkable():
     """console entry point upload pdf to remarkable
     Args
@@ -55,6 +56,39 @@ def pdf_to_remarkable():
     args = parser.parse_args()
     upload_pdf(args.pdf, args.parent, args.name, args.restart_xochitl)
 
+
+def pdf_bibtex():
+    """ entry point to metadata_from_bib
+    Args
+        pdf     (str) valid pdf file
+        bib     (str) valid bib file
+        --pages (int, list, str) str: 1- slice(1,None)
+    """
+    parser = argparse.ArgumentParser(description='Add bib to pdf')
+    parser.add_argument('pdf', type=str, help='valid .pdf file')
+    parser.add_argument('bib', type=str, help='valid .bib file')
+    parser.add_argument('-p', '--pages', nargs='+', default=None,
+                        help='page: eg. 2, pages: eg. 1 2 3 or pagerange: eg. 1- or 1-4')
+    args = parser.parse_args()
+    pages = args.pages
+    if pages is not None:
+        assert isinstance(pages, list), f"expected list got {pages}, {type(pages)}"
+        if len(pages) > 1:
+            pages = [int(p) for p in pages]
+        elif '-' in pages[0]:
+            pages = pages[0].split("-")
+            for i, p in enumerate(pages):
+                if p in ('None', ''):
+                    pages[i] = None
+                else:
+                    pages[i] = int(p)
+            pages = slice(*pages)
+        else:
+            pages = int(pages[0])
+    print(f'metadata_from_bib({args.pdf},{args.bib})')
+    metadata_from_bib(args.pdf, args.bib, pages)
+
+
 def remarkable_ls():
     """console entry point to print remarkable file graph from local backup
     Args
@@ -73,10 +107,12 @@ def remarkable_ls():
     else:
         pprint.pprint(graph)
 
+
 def remarkable_restart():
     """ restart remarkable service
     """
     restart_xochitl()
+
 
 def pdf_info():
     """console entry point to return num pages, and dimensions of a local pdf
@@ -100,6 +136,7 @@ def pdf_info():
         help(pdf_info)
     else:
         get_pdf_info(args.pdf, args.page, verbose=True)
+
 
 def remarkable_export_annotated():
     """ console entry point merging pdf and rmscene
@@ -137,6 +174,7 @@ def remarkable_read_rm():
         print()
         pprint.pprint(el)
 
+
 def remarkable_help():
     """console entry point for info"""
     ip = '10.11.99.1'
@@ -168,6 +206,11 @@ def remarkable_help():
         Optional    parent  (str ['']) visible folder name in remarkable
         kwargs      --name -n (str [None]) visible name | default pdfbasename.replace("_"," ") 
                     --no_restart -r   NO ARGS  | default restart xochitl to refresh UI
+    $ {_B}pdf_bibtex  <pdf> <bib> [-p, --pages ]
+        {_G}# add bibtex to pdf{_A} 
+        Args    pdf     (str) pdf file
+                bib     (str) text bibtex file
+        kwargs  --pages -p  (list, int, range as str) 2 | 1 2 3 | 1- | 1-4' 
     $ {_B}remarkable_restart  {_G}# restart xochitl service to view upload changes{_A}   
     $ {_B}remarkable_backup {_A}[folder] # folder in (existing_dir, ? )
         {_G}# back up reMarkable local,  folder name stored to ~/.xochitl file{_A}
