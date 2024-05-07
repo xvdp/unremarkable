@@ -68,7 +68,7 @@ def add_pdf_metadata(pdf: str,
     reader = pypdf.PdfReader(pdf)
     writer = pypdf.PdfWriter()
     metadata = dict(reader.metadata) if reader.metadata is not None else {}
-
+    # PdfWriter.clean_page
     author_aliases = ['authors', 'Author']
     if author is None:
         for a in author_aliases:

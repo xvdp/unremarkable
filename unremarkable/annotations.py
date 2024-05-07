@@ -483,10 +483,10 @@ def add_authors(filename: str,
 
 
 def export_annotated_pdf(filename: str,
-                      page: Union[int, tuple, bool] = True,
-                      out_folder: str = ".",
-                      out_name: Optional[str] = None,
-                      xochitl: Optional[str] = None) -> None:
+                         page: Union[int, tuple, bool] = True,
+                         out_folder: str = ".",
+                         out_name: Optional[str] = None,
+                         xochitl: Optional[str] = None) -> None:
     """ export merged pdf file from backup
     Args
         filename    (str) uuid in xochitl directory, or visible name

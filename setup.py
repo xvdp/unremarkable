@@ -20,7 +20,7 @@ def _requirements():
 
 setup(
     name=_NAME,
-    version=_set_version("0.0.9"),
+    version=_set_version("0.1.0"),
     packages=find_packages(),
     install_requires=_requirements(),
     entry_points={
@@ -28,6 +28,7 @@ setup(
             'pdf_info=unremarkable.__main__:pdf_info',  # . local pdf info: num pages, width, height
             'pdf_to_remarkable=unremarkable.__main__:pdf_to_remarkable',    # -> upload pdf
             'pdf_bibtex=unremarkable.__main__:pdf_bibtex',                  # add .bib to .pdf
+            'pdf_metadata=unremarkable.__main__:pdf_metadata',
             'remarkable_backup=unremarkable.__main__:remarkable_backup',    # <- backup to local
             'remarkable_ls=unremarkable.__main__:remarkable_ls', # . list files on backup
             'remarkable_export_annotated=unremarkable.__main__:remarkable_export_annotated',

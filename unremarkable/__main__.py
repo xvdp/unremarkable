@@ -9,7 +9,7 @@ import pprint
 from .unremarkable import backup_tablet, upload_pdf, build_file_graph, \
     _is_host_reachable, _get_xochitl, restart_xochitl
 from .annotations import export_annotated_pdf
-from .pdf import get_pdf_info, metadata_from_bib
+from .pdf import get_pdf_info, metadata_from_bib, add_pdf_metadata
 from . import rmscene
 
 _A="\033[0m"
@@ -57,20 +57,7 @@ def pdf_to_remarkable():
     upload_pdf(args.pdf, args.parent, args.name, args.restart_xochitl)
 
 
-def pdf_bibtex():
-    """ entry point to metadata_from_bib
-    Args
-        pdf     (str) valid pdf file
-        bib     (str) valid bib file
-        --pages (int, list, str) str: 1- slice(1,None)
-    """
-    parser = argparse.ArgumentParser(description='Add bib to pdf')
-    parser.add_argument('pdf', type=str, help='valid .pdf file')
-    parser.add_argument('bib', type=str, help='valid .bib file')
-    parser.add_argument('-p', '--pages', nargs='+', default=None,
-                        help='page: eg. 2, pages: eg. 1 2 3 or pagerange: eg. 1- or 1-4')
-    args = parser.parse_args()
-    pages = args.pages
+def _parse_pages(pages):
     if pages is not None:
         assert isinstance(pages, list), f"expected list got {pages}, {type(pages)}"
         if len(pages) > 1:
@@ -85,9 +72,56 @@ def pdf_bibtex():
             pages = slice(*pages)
         else:
             pages = int(pages[0])
-    print(f'metadata_from_bib({args.pdf},{args.bib})')
-    metadata_from_bib(args.pdf, args.bib, pages)
+    return pages
 
+
+def pdf_bibtex():
+    """ entry point to metadata_from_bib
+    Args
+        pdf     (str) valid pdf file
+    optional
+        bib     (str) valid bib file - if None looks for pdf.replace('.pdf', '.bib')
+        --pages (int, list, str) str: 1- slice(1,None)
+        --keys  (str, list) # delete keys
+    """
+    parser = argparse.ArgumentParser(description='Add bib to pdf')
+    parser.add_argument('pdf', type=str, help='valid .pdf file')
+    parser.add_argument('bib', type=str, nargs='?', help='valid .bib file', default=None)
+    parser.add_argument('-p', '--pages', nargs='+', default=None,
+                        help='page: eg. 2, pages: eg. 1 2 3 or pagerange: eg. 1- or 1-4')
+    parser.add_argument('-k', '--keys', nargs='+', default=None, help="delete keys")
+    args = parser.parse_args()
+    assert osp.isfile(args.pdf), f"pdf file not found {args.pdf}"
+    bib = args.bib
+    if bib is None:
+        _bib = args.pdf.replace(".pdf", ".bib")
+        for _b in [_bib, ".".join([osp.dirname(_bib), osp.basename(_bib)])]:
+            print(f"testing {_b} isfile: {osp.isfile(_b)}")
+            if osp.isfile(_b):
+                bib = _b
+                break
+    assert osp.isfile(bib), f"bib file not found {args.bib}"
+    pages = _parse_pages(args.pages)
+    metadata_from_bib(args.pdf, bib, pages, args.keys)
+
+
+def pdf_metadata():
+    """ add metadata to pdf if no .bib exists - otherwise run pdf_bibtex()
+    """
+    parser = argparse.ArgumentParser(description='Add metadata pdf')
+    parser.add_argument('pdf', type=str, help='valid .pdf file')
+    parser.add_argument('-a', '--author', type=str, nargs='+', help='add authtors', default=None)
+    parser.add_argument('-y', '--year', type=int, help='add year', default=None)
+    parser.add_argument('-t', '--title', type=str, help='add title', default=None)
+    parser.add_argument('-p', '--pages', nargs='+', default=None,
+                        help='page: eg. 2, pages: eg. 1 2 3 or pagerange: eg. 1- or 1-4')
+    parser.add_argument('-k', '--keys', nargs='+', default=None, help="delete keys")
+    args = parser.parse_args()
+    pages = _parse_pages(args.pages)
+    if any(pages, args.keys, args.title, args.title, args.author, args.year):
+
+        add_pdf_metadata(args.pdf, author=args.author, title=args.title,
+                        custom_pages=args.pages, delete_keys=args.keys)
 
 def remarkable_ls():
     """console entry point to print remarkable file graph from local backup
@@ -180,10 +214,10 @@ def remarkable_help():
     ip = '10.11.99.1'
     if _is_host_reachable(ip, packets=1):
         _col = _G
-        connected = "IS"
+        connected = f"{_G}IS"
     else:
         _col = _R
-        connected = "IS NOT"
+        connected = f"{_R}IS NOT"
     xochitl = _get_xochitl()
     if xochitl is not None:
         _col2 = _Y
@@ -192,13 +226,12 @@ def remarkable_help():
     else:
         _col2 = _R
         xochitl=""
-        isstored="NO "
+        isstored="NOT "
     # backup folder NOT YET stored in ~/.xochitl
 
     _help = f"""{_Y}https://github.com/xvdp/unremarkable{_A}  access reMarkable without app.
-    reMarkable {_col}{connected} connected {_A} through USB IP {_col}{ip}{_A}.
-    {_col2}{isstored}backup folder found in ~/.xochitl {_G}{xochitl} {_A}
-
+    reMarkable {_col}{connected} connected {_A} through USB IP {_col}{ip}{_A}
+    backup folder {_col}{isstored}found in ~/.xochitl {_G}{xochitl} {_A}
 {_Y}Console{_A}
     $ {_B}pdf_to_remarkable{_A} <pdf> [visible folder name] [-n, --name <file visible name>] [-r, --no_restart]
         {_G}# upload one pdf of all pdfs in a local folder to reMarkable{_A}
@@ -227,8 +260,6 @@ def remarkable_help():
                     folder      local folder | default current
                     name        output name | default visibleName
                     xochitl     backup folder | default cat ~/.xochitl
-    
-
 {_Y}Python{_A}
     {_M}>>> {_B}from unremarkable import remarkable_name, add_authors, add_pdf_metadata, get_annotated{_A}
     {_M}>>> {_B}remarkable_name({_A}<partial visbilbe name or uuid>{_B}){_A} -> tuple(uuid, visible name)
@@ -237,9 +268,8 @@ def remarkable_help():
         {_G}# add author names to reMarkable BACKUP .content, then upload to tablet, tablet file must be closed{_A}
     {_M}>>> {_B}add_pdf_metadata({_A}filename, author=None, title=None, year=None, subject=None, delete_keys=(), suffix=False, custom_pages=None, bibtex=None, **kwargs{_B}){_A} 
         {_G}# add metadata keys (author, title, year, subject, **kwargs), delete keys, add suffix, export custom page tuple/ range to LOCAL PDF{_A}
-        {_G}# arg bibgex can pass a .bib file name or a string containing bibtex formated info{_A}
-    {_M}>>> files = {_B}get_annotated(){_A} -> dict('annotated':[], 'old':[])
+        {_G}# arg bibtex can pass a .bib file name or a string containing bibtex formated info{_A}
+    {_M}>>> {_B}files = get_annotated(){_A} -> dict('annotated':[], 'old':[])
         {_G}# files with annotations on reMarkable BACKUP,  'old' are files without zoomMode - are they v5? WIP.{_A}
-    >>> pprint.pprint(files['annotated']
-    """
+    >>> pprint.pprint(files['annotated'])"""
     print (_help)
