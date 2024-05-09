@@ -46,6 +46,7 @@ def upload_pdf(pdf: str,
                folder: str = "",
                visible_name: Optional[str] = None,
                restart: bool = True,
+               force: bool = False,
                **kwargs) -> None:
     """ remarkable pdf upload requires min 3 filesn w/o which it won't show pdf
             <uuid>.pdf
@@ -57,6 +58,7 @@ def upload_pdf(pdf: str,
         folder          (str ['']) destination folder name, existing only, default ""
         visible_name    (str [None]) if none, file will be uploaded as pdf basename
         restart         (bool [True]) restarts xochitl service to scan folders
+        force           (bool [False]) if True and file found, don't upload
     kwargs:
         host    (str ['10.11.99.1']) remarkable usbc port, change if using wifi
         user    (str ['root']) remarkable default
@@ -69,19 +71,19 @@ def upload_pdf(pdf: str,
         print (f"host <{host}> is not reachable")
         return None
 
+    # multiple files
     if osp.basename(pdf) == "*":
         pdfs = [f.path for f in os.scandir(osp.dirname(pdf) or None)
                 if f.name.lower().endswith(".pdf")]
         if pdfs:
             print(f"Uploading {len(pdfs)} files to reMarkable")
             for pdf in pdfs:
-                upload_pdf(pdf, folder, visible_name, False, **kwargs)
+                upload_pdf(pdf, folder, visible_name, restart=False, force=force, **kwargs)
             if restart:
                 restart_xochitl(**kwargs)
         else:
             print(f"No pdfs found in {osp.abspath(osp.expanduser(osp.dirname(pdf)))}")
     else:
-
         assert osp.isfile(pdf) and pdf.lower().endswith(".pdf"), f"pdf expected {pdf}, not found"
 
         # generate new file name uuid
@@ -101,11 +103,23 @@ def upload_pdf(pdf: str,
             visible_name = osp.basename(osp.splitext(pdf)[0])
             visible_name = visible_name.replace('_', ' ')
 
+        # check that file hasnt already been uploaded
+        if not force:
+            file_uuid = get_uuid_from_name(visible_name, target_type='DocumentType', **kwargs)
+            if file_uuid:
+                _R="\033[31m"
+                _Y="\033[32m"
+                _A="\033[0m"
+                parent_uuid, parent_name = get_remote_parent(file_uuid, False, **kwargs)
+                _msg = f" {_R}exists, nothing done: pass force=True (-f) to override{_A}"
+                print(f"{_R}file {_Y}{parent_name}/{visible_name}{_A} ({file_uuid}.pdf){_msg}")
+                return
+
         # create .content and .metadata files
         content = make_content(pdf)
         metadata = make_metadata(pdf, visible_name, uuidfolder)
 
-        print(f"Uploading\n\t{osp.basename(pdf)}\n\t as '{folder}/{visible_name}'\n\t uuid {uid}")
+        print(f"Upload\n\t{osp.basename(pdf)}\n\t as '{folder}/{visible_name}'\n\t uuid {uid}")
         ret = _rsync_up(pdf, name=f"{uid}.pdf", **_kw)
         # upload pdf and if success, write json files
         if not ret: # generate content and metadata files on device
@@ -169,8 +183,62 @@ def gen_uuid(uuids=()):
         uid = gen_uuid(uuids)
     return uid
 
+def runcmd(cmd: list,
+           shell: bool = False,
+           text: bool = True,
+           check: bool = False,
+           verbose: bool = True) -> sp.CompletedProcess:
+    """ default run
+    Args
+        cmd     (list, str)     # to run str set shell: True
+        shell   (bool [False])  # shell=False, prevent injections
+        text    (bool [True])   # text=True, return ascii
+        check   (bool [False])  # check=False, failure tolerant
+    """
+    result = sp.run(cmd, shell=shell,   # shell=False, prevent injections
+                stdout=sp.PIPE, stderr=sp.PIPE,
+                text=text,          # text=True, return ascii
+                check=check)        # check=False, failure tolerant
+    if not result.returncode:
+        return result.stdout
+    else:
+        if verbose:
+            print(f"cmd {cmd} -> return code {result.returncode}, error {result.stderr}")
+        return None
+
+
+def get_remote_parent(uuid_name: str, check_reachable: bool = True, **kwargs) -> tuple:
+    """return uuid and visible name of remote parent
+    # 1 looks at uuid metadata, gets 'parent' field -> uuid
+    # 2 looks at parent uuid, gets visibleName field
+    Args
+        uuid                (str) file uuid
+        check_reachable     (bool [True]) if False , assumes connection is good
+    kwargs host, user, path
+    """
+    host, user, path = get_host_user_path(**_kwargs_get(**kwargs))
+    if check_reachable and not _is_host_reachable(host, packets=2):
+        print (f"host <{host}> is not reachable")
+        return None
+
+    out = runcmd(['ssh', f'{user}@{host}', 'cat', f"{path}/{uuid_name}.metadata"])
+    if out is None: # no uuid_name.metadata file
+        return None, ''
+
+    parent_uuid = json.loads(out).get('parent')
+    if parent_uuid is None: #  metadata contains no 'parent' field
+        return None, ''
+
+    out = runcmd(['ssh', f'{user}@{host}', 'cat', f"{path}/{parent_uuid}.metadata"])
+    if out is None: # no parent_uuid.metadata file
+        return None, ''
+
+    return parent_uuid, json.loads(out).get('visibleName', '')
+
+
 def list_remote(ext: Optional[str] = '.pdf', **kwargs) -> Optional[list]:
     """ return basenames of existing pdf files in reMarkable
+    result = sp.run(cmd, shell=False, stdout=sp.PIPE, stderr=sp.PIPE, text=True,check=False) 
     """
     keep_ext = kwargs.get('keep_ext', False)
     host, user, path = get_host_user_path(**_kwargs_get(**kwargs))
@@ -178,23 +246,15 @@ def list_remote(ext: Optional[str] = '.pdf', **kwargs) -> Optional[list]:
         print (f"host <{host}> is not reachable")
         return None
     path = path if ext is None else osp.join(path, f"*{ext}")
-    # cmd = f'ssh {user}@{host} ls {path}'      # shell=True
-    cmd = ['ssh', f'{user}@{host}', 'ls', path] # simple list cmd -> shell=False
-
-    result = sp.run(cmd, shell=False,   # shell=False, prevent injections
-                    stdout=sp.PIPE, stderr=sp.PIPE,
-                    text=True,          # text=True, return ascii
-                    check=False)        # check=False, failure tolerant
-    out = None
-    if result.returncode == 0:
-        out = result.stdout.split("\n")[:-1]
+    cmd = ['ssh', f'{user}@{host}', 'ls', path]
+    out = runcmd(cmd)
+    if out is not None:
+        out = out.split("\n")[:-1]
         if len(out) == 1 and not out[0]:
             out = []
         out = [osp.basename(o) for o in out]
         if not keep_ext:
             out = [osp.splitext(o)[0] for o in out]
-    else:
-        print(f"Cannot Access {user}@{host}, check connection, error: {result.stderr}")
     return out
 
 def _is_uuid(name: str):

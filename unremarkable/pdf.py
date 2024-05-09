@@ -67,6 +67,11 @@ def add_pdf_metadata(pdf: str,
 
     reader = pypdf.PdfReader(pdf)
     writer = pypdf.PdfWriter()
+    """ TODO FIX: when bibtex  refalready exists 
+    metadata = dict(reader.metadata) if reader.metadata is not None else {}
+        if not data.get(key):
+    TypeError: unhashable type: 'ArrayObject'
+    """
     metadata = dict(reader.metadata) if reader.metadata is not None else {}
     # PdfWriter.clean_page
     author_aliases = ['authors', 'Author']

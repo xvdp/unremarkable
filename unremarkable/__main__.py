@@ -52,9 +52,11 @@ def pdf_to_remarkable():
                         help='visible name; default is pdf basename without ext replacing "_"," "')
     parser.add_argument('-r', '--no_restart_xochitl', action='store_false', dest='restart_xochitl',
                         help='disable restart_xochitl of xochitl service')
+    parser.add_argument('-f', '--force', action='store_true',
+                        help='force upload even if name exists')
     # Parse arguments
     args = parser.parse_args()
-    upload_pdf(args.pdf, args.parent, args.name, args.restart_xochitl)
+    upload_pdf(args.pdf, args.parent, args.name, args.restart_xochitl, args.force)
 
 
 def _parse_pages(pages):
