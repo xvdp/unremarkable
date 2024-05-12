@@ -115,15 +115,16 @@ def pdf_metadata():
     parser.add_argument('-a', '--author', type=str, nargs='+', help='add authtors', default=None)
     parser.add_argument('-y', '--year', type=int, help='add year', default=None)
     parser.add_argument('-t', '--title', type=str, help='add title', default=None)
+    parser.add_argument('-u', '--url', type=str, help='add url', default=None)
     parser.add_argument('-p', '--pages', nargs='+', default=None,
                         help='page: eg. 2, pages: eg. 1 2 3 or pagerange: eg. 1- or 1-4')
     parser.add_argument('-k', '--keys', nargs='+', default=None, help="delete keys")
     args = parser.parse_args()
     pages = _parse_pages(args.pages)
-    if any(pages, args.keys, args.title, args.title, args.author, args.year):
-
+    kwargs = {'url': args.url} if args.url else {}
+    if any((pages, args.keys, args.title, args.title, args.author, args.year, kwargs)):
         add_pdf_metadata(args.pdf, author=args.author, title=args.title,
-                        custom_pages=args.pages, delete_keys=args.keys)
+                        custom_pages=args.pages, delete_keys=args.keys, **kwargs)
 
 def remarkable_ls():
     """console entry point to print remarkable file graph from local backup
