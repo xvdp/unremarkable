@@ -4,6 +4,7 @@ pdf utilities
 from typing import Optional, Union
 import os
 import os.path as osp
+import numpy as np
 from pprint import pprint
 import pypdf
 from pybtex.database import parse_file, parse_string
@@ -80,10 +81,11 @@ def add_pdf_metadata(pdf: str,
             if a in kwargs:
                 author = kwargs.pop(a)
                 break
-
+    if isinstance(author, (list, tuple)):
+        author = ", ".join(author)
     # add standard keys
     if year is not None and author is not None:
-        author = f"{author}, {year}"
+        author = f"{author} {year}"
     add_keys = {'/Author': author, "/Title": title, '/Subject': subject, '/Keywords': keywords}
     add_keys = {k:v for k,v in add_keys.items() if v is not None}
 
@@ -163,8 +165,9 @@ def metadata_from_bib(pdf: str,
             authors.append(f"{fn}. {ln}")
         year = entry.fields.get('year', '')
         title = entry.fields.get('title', None)
+        authors = ', '.join(authors)
         if year:
-            authors = ' '.join([', '.join(authors), year])
+            authors = ' '.join([authors, year])
     add_pdf_metadata(pdf, author=authors, title=title, bibtex=bib.to_string('bibtex'),
                      custom_pages=custom_pages, delete_keys=delete_keys, **kwargs)
 
@@ -210,3 +213,77 @@ def get_pdfs(folder: str, key: Optional[str] = None) -> list:
     if key:
         pdfs = [f for f in pdfs if key in f]
     return pdfs
+
+
+def split_pdf(pdf: str, outname: Optional[str] = None):
+    """ saves one pdf per page
+    """
+    reader = pypdf.PdfReader(pdf)
+    num = len(reader.pages)
+    outname = osp.splitext(outname or pdf)[0]
+    outname = f"{outname}_%0{len(str(num))}d.pdf"
+    for i, page in enumerate(reader.pages):
+        o = outname%i
+        writer = pypdf.PdfWriter()
+        writer.add_page(page)
+        with open(outname%i, 'wb') as output_pdf:
+            writer.write(output_pdf)
+
+
+# def _sizes(size, dpi: Optional[int] = None):
+#     out = {
+#         'a0': (841, 1189),
+#         'a1': (594, 841),
+#         'a2': (420, 594),
+#         'a3': (297, 420),
+#         'a4': (210, 297),
+#         'a5': (128, 210),
+#         'a6': (105, 148),
+#         'ansi a': (216, 297),
+#         'letter': (216, 297),
+#         'legal' : (216, 356),
+#         'ledger': (279, 432),
+#         'ansi b': (279, 432),
+#         'ansi c': (432, 559),
+#         'ansi d': (559, 864),
+#         'ansi e': (864, 1118),
+#         'arch a': (229, 305),
+#         'arch b': (305, 457),
+#         'arch c': (457, 610),
+#         'arch d': (610, 914),
+#         'arch e': (914, 1219)
+#     }
+#     assert size.lower() in out, f"size name '{size.lower}' not found in {list(out.keys())}"
+#     size = out[size.lower()]
+#     if dpi is not None:
+#         size = [round(size[0]*dpi/25.41), round(size[1]*dpi/25.41)]
+    # return size
+
+def convert_page_size(pdf: str,
+                      outname: str,
+                      size: Union[tuple, list, str, float, int],):
+
+    """
+    size A0, --A8,
+    """
+    reader = pypdf.PdfReader(pdf)
+    num = len(reader.pages)
+    width = [p.mediabox.width for p in reader.pages]
+    height = [p.mediabox.height for p in reader.pages]
+    width = np.unique(width)[np.argmin(np.abs(np.unique(width) - np.mean(width)))]
+    height = np.unique(height)[np.argmin(np.abs(np.unique(height) - np.mean(height)))]
+
+    if isinstance(size, (float, int)):
+        size = (round(size*width), round(size*float))
+    if isinstance(size, str):
+        # size = _sizes(size, dpi)
+        size = tuple(pypdf.PaperSize.__dict__[size])
+    assert isinstance(size, (tuple, list)) and len(size) == 2, f"invalid size spec '{size}', tuple in mm reqd."
+    size = list(size)
+    if width > height:
+        size = size[::-1]
+
+    writer = pypdf.PdfWriter()
+    for i, page in enumerate(reader.pages):
+        page.scale_by(size[0]/width)
+        writer.add_page(page)

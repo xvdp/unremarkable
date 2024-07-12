@@ -35,6 +35,7 @@ setup(
             'remarkable_read_rm=unremarkable.__main__:remarkable_read_rm',
             'remarkable_restart=unremarkable.__main__:remarkable_restart',
             'remarkable_help=unremarkable.__main__:remarkable_help',
+            'not_in_remarkable=unremarkable.__main__:not_in_remarkable'
         ],
     },
     python_requires='>=3.6',

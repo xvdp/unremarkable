@@ -3,11 +3,12 @@ console entry points for unremarkable handling of reMarkable files
 
 """
 import argparse
+import os
 import os.path as osp
 import pprint
 
 from .unremarkable import backup_tablet, upload_pdf, build_file_graph, \
-    _is_host_reachable, _get_xochitl, restart_xochitl
+    _is_host_reachable, _get_xochitl, restart_xochitl, get_remote_files
 from .annotations import export_annotated_pdf
 from .pdf import get_pdf_info, metadata_from_bib, add_pdf_metadata
 from . import rmscene
@@ -85,6 +86,7 @@ def pdf_bibtex():
         bib     (str) valid bib file - if None looks for pdf.replace('.pdf', '.bib')
         --pages (int, list, str) str: 1- slice(1,None)
         --keys  (str, list) # delete keys
+        rename filename.bib to .filename.bib
     """
     parser = argparse.ArgumentParser(description='Add bib to pdf')
     parser.add_argument('pdf', type=str, help='valid .pdf file')
@@ -93,18 +95,22 @@ def pdf_bibtex():
                         help='page: eg. 2, pages: eg. 1 2 3 or pagerange: eg. 1- or 1-4')
     parser.add_argument('-k', '--keys', nargs='+', default=None, help="delete keys")
     args = parser.parse_args()
-    assert osp.isfile(args.pdf), f"pdf file not found {args.pdf}"
+    _pdf, ext = osp.splitext(args.pdf)
+    if not osp.isfile(args.pdf) and ext.lower() != '.pdf':
+        ext = '.pdf'
+    pdf = f'{_pdf}{ext}'
+    assert osp.isfile(pdf), f"pdf file not found {pdf}"
     bib = args.bib
-    if bib is None:
-        _bib = args.pdf.replace(".pdf", ".bib")
-        for _b in [_bib, ".".join([osp.dirname(_bib), osp.basename(_bib)])]:
-            print(f"testing {_b} isfile: {osp.isfile(_b)}")
-            if osp.isfile(_b):
-                bib = _b
-                break
+    if bib is None or not osp.isfile(bib):
+        _bib = f'{_pdf}.bib'
+        __bib = ".".join([osp.dirname(_bib), osp.basename(_bib)])
+        if osp.isfile(_bib):
+            os.rename(_bib, __bib)
+        bib = __bib if osp.isfile(__bib) else None
+
     assert osp.isfile(bib), f"bib file not found {args.bib}"
     pages = _parse_pages(args.pages)
-    metadata_from_bib(args.pdf, bib, pages, args.keys)
+    metadata_from_bib(pdf, bib, pages, args.keys)
 
 
 def pdf_metadata():
@@ -123,8 +129,19 @@ def pdf_metadata():
     pages = _parse_pages(args.pages)
     kwargs = {'url': args.url} if args.url else {}
     if any((pages, args.keys, args.title, args.title, args.author, args.year, kwargs)):
-        add_pdf_metadata(args.pdf, author=args.author, title=args.title,
+        add_pdf_metadata(args.pdf, author=args.author, title=args.title, year=args.year,
                         custom_pages=args.pages, delete_keys=args.keys, **kwargs)
+
+def not_in_remarkable():
+    """ outputs remote files in folder
+    """
+    parser = argparse.ArgumentParser(description='List Files in older not in remarkable tablet')
+    parser.add_argument('folder', type=str, nargs='?', default='.', help='valid .pdf file')
+    args = parser.parse_args()
+    folder = osp.abspath(osp.expanduser(args.folder))
+    files = [f.path for f in os.scandir(folder) if f.name.endswith('.pdf')]
+    out = get_remote_files(files)
+    print(f"files not uploaded: {[osp.basename(o) for o in out['nonexist']]}")
 
 def remarkable_ls():
     """console entry point to print remarkable file graph from local backup

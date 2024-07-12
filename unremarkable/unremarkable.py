@@ -5,7 +5,7 @@ ENTRY POINTS:
 $ pdf_to_remarkable path/to/file.pdf ["remarkable folder name"] ["file visible name"]
 $ backup_remarkable [path/to/backup/folder]
 """
-from typing import Optional
+from typing import Optional, Union
 import os
 import os.path as osp
 import subprocess as sp
@@ -30,14 +30,18 @@ def _kwargs_get(items=('host', 'user', 'path'), **kwargs):
     return {k:v for k,v in kwargs.items() if k in items}
 
 
-def _is_host_reachable(ip='10.11.99.1', packets=5) -> bool:
+def _is_host_reachable(ip='10.11.99.1', packets=5, msg=None) -> bool:
     command = ['ping', '-w', str(packets), ip]
     try:
         sp.run(command, stdout=sp.DEVNULL, stderr=sp.DEVNULL, check=True)
         return True
     except sp.CalledProcessError:
+        if msg is not None:
+            print(msg)
         return False
 
+def _visible_name(name):
+    return osp.basename(osp.splitext(name)[0]).replace('_', ' ')
 
 ##
 # Main upload process
@@ -67,8 +71,7 @@ def upload_pdf(pdf: str,
     # TODO also allow epub
     _kw = _kwargs_get(**kwargs)
     host, user, path = get_host_user_path(**_kw)
-    if not _is_host_reachable(host, packets=2):
-        print (f"host <{host}> is not reachable")
+    if not _is_host_reachable(host, packets=2, msg=f"host <{host}> is not reachable"):
         return None
 
     # multiple files
@@ -100,8 +103,7 @@ def upload_pdf(pdf: str,
 
         # image visible name from pdf name
         if visible_name is None:
-            visible_name = osp.basename(osp.splitext(pdf)[0])
-            visible_name = visible_name.replace('_', ' ')
+            visible_name = _visible_name(pdf)
 
         # check that file hasnt already been uploaded
         if not force:
@@ -139,6 +141,7 @@ def upload_pdf(pdf: str,
         if restart:
             restart_xochitl(**kwargs)
 
+
 def restart_xochitl(**kwargs) -> int:
     """ serivce is restarted on reboot
     """
@@ -166,8 +169,7 @@ def _rsync_up(fname: str,
     TODO replace _rsync pdf"""
     host, user, path = get_host_user_path(**_kwargs_get(**kwargs))
 
-    if not _is_host_reachable(host, packets=2):
-        print (f"host <{host}> is not reachable")
+    if not _is_host_reachable(host, packets=2, msg=f"host <{host}> is not reachable"):
         return 1
     name = osp.join(path, osp.basename(kwargs.get('name', fname)))
     sync_args = (sync_args, '--update') if update else (sync_args,)
@@ -182,6 +184,7 @@ def gen_uuid(uuids=()):
     if uid in uuids:
         uid = gen_uuid(uuids)
     return uid
+
 
 def runcmd(cmd: list,
            shell: bool = False,
@@ -206,6 +209,48 @@ def runcmd(cmd: list,
             print(f"cmd {cmd} -> return code {result.returncode}, error {result.stderr}")
         return None
 
+def get_remote_files(name: Union[str, tuple],
+                     parent: bool = False,
+                     verbose: bool = True,
+                     **kwargs) -> dict:
+    """check if  remote file/files exist, return dict with format provided
+    
+    { 'nonexist':[name ..],
+      'exist: {name: {'uuid':uuid, 'parent_name': parent_name, 'parent_uuid': parent_uuid}}
+    }
+    
+    """
+    host, user, path = get_host_user_path(**_kwargs_get(**kwargs))
+    out = {'nonexist': [], 'exist': {}}
+    if not _is_host_reachable(host, packets=2, msg=f"host <{host}> is not reachable"):
+        return out
+    if isinstance(name, str):
+        name = (name,)
+
+    for i, n in enumerate(name):
+        if verbose:
+            print(f"checking [{i}/{len(name)}] {n},")
+        _basename = osp.basename(n)
+        if _is_uuid(osp.splitext(_basename)[0]):
+            file_uuid = uuid_exists(_basename, **kwargs)
+        else:
+            file_uuid = get_uuid_from_name( _visible_name(n), target_type='DocumentType', **kwargs)
+
+        if not file_uuid:
+            if verbose:
+                print("  -> NOT FOUND")
+            out['nonexist'] += [n]
+        else:
+            if verbose:
+                print("  -> exists")
+            out['exist'][n] = {'uuid': file_uuid}
+            if parent:
+                print(f"get parent of {file_uuid}, {n}")
+                parent_uuid, parent_name = get_remote_parent(file_uuid, False, **kwargs)
+                out['exist'][n]['parent_name'] = parent_name
+                out['exist'][n]['parent_uuid'] = parent_uuid
+    return out
+
 
 def get_remote_parent(uuid_name: str, check_reachable: bool = True, **kwargs) -> tuple:
     """return uuid and visible name of remote parent
@@ -217,8 +262,8 @@ def get_remote_parent(uuid_name: str, check_reachable: bool = True, **kwargs) ->
     kwargs host, user, path
     """
     host, user, path = get_host_user_path(**_kwargs_get(**kwargs))
-    if check_reachable and not _is_host_reachable(host, packets=2):
-        print (f"host <{host}> is not reachable")
+    if check_reachable and not _is_host_reachable(host, packets=2,
+                                                  msg=f"host <{host}> is not reachable"):
         return None
 
     out = runcmd(['ssh', f'{user}@{host}', 'cat', f"{path}/{uuid_name}.metadata"])
@@ -242,8 +287,7 @@ def list_remote(ext: Optional[str] = '.pdf', **kwargs) -> Optional[list]:
     """
     keep_ext = kwargs.get('keep_ext', False)
     host, user, path = get_host_user_path(**_kwargs_get(**kwargs))
-    if not _is_host_reachable(host, packets=2):
-        print (f"host <{host}> is not reachable")
+    if not _is_host_reachable(host, packets=2, msg=f"host <{host}> is not reachable"):
         return None
     path = path if ext is None else osp.join(path, f"*{ext}")
     cmd = ['ssh', f'{user}@{host}', 'ls', path]
@@ -256,6 +300,7 @@ def list_remote(ext: Optional[str] = '.pdf', **kwargs) -> Optional[list]:
         if not keep_ext:
             out = [osp.splitext(o)[0] for o in out]
     return out
+
 
 def _is_uuid(name: str):
     try:
@@ -309,6 +354,20 @@ def get_parent(name: str, folder: str = '.') -> tuple:
         parentname = t['visibleName']
     return {"file":{uuidname, name}, "parent":(parentuuid, parentname)}
 
+
+def uuid_exists(uuid_name: str, **kwargs) -> Optional[str]:
+    """ check if file exists in remote folder
+    """
+    host, user, path = get_host_user_path(**_kwargs_get(**kwargs))
+    cmd = ['ssh', f'{user}@{host}', f'''[ -e {path}/{uuid_name} ] && echo {path}/{uuid_name} || echo ''']
+    out = ''
+    try:
+        result = sp.run(cmd, check=True, stdout=sp.PIPE, stderr=sp.PIPE, text=True)
+        if result.stdout:
+            out = osp.basename(osp.splitext(result.stdout.strip())[0])
+    except sp.CalledProcessError as e:
+        pass
+    return out
 
 
 def get_uuid_from_name(name: str, target_type = "CollectionType", **kwargs) -> Optional[str]:
@@ -427,8 +486,7 @@ def backup_tablet(folder: Optional[str] = None, **kwargs) -> int:
     """
     # 1. is remarkable plugged in
     host, user, path = get_host_user_path(**_kwargs_get(**kwargs))
-    if not _is_host_reachable(host, packets=2):
-        print (f"host <{host}> is not reachable")
+    if not _is_host_reachable(host, packets=2, msg=f"host <{host}> is not reachable"):
         return 1
 
     if folder is None:
@@ -582,8 +640,7 @@ def replace_pdf(pdf, visible_name, **kwargs) -> int:
     TODO: how do i insert a missing page. shift the content
     """
     host, user, path = get_host_user_path(**_kwargs_get(**kwargs))
-    if not _is_host_reachable(host, packets=2):
-        print (f"host <{host}> is not reachable")
+    if not _is_host_reachable(host, packets=2, msg=f"host <{host}> is not reachable"):
         return 1
 
     uidname = get_uuid_from_name(visible_name, "DocumentType", **kwargs)
