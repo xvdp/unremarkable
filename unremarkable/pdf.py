@@ -200,8 +200,8 @@ def get_pdf_info(pdf: str, page: Optional[int] = None, verbose: bool = False) ->
     if verbose:
         if '/Bibtex' in out:
             bibtex = out.pop('/Bibtex')
+            print(f"\n/Bibtex\n{bibtex}")
         pprint(out)
-        print(f"\n/Bibtex\n{bibtex}")
         return None
     return out
 
