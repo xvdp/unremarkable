@@ -10,7 +10,7 @@ import pprint
 from .unremarkable import backup_tablet, upload_pdf, build_file_graph, \
     _is_host_reachable, _get_xochitl, restart_xochitl, get_remote_files
 from .annotations import export_annotated_pdf
-from .pdf import get_pdf_info, metadata_from_bib, add_pdf_metadata
+from .pdf import get_pdf_info, pdf_mod
 from . import rmscene
 
 _A="\033[0m"
@@ -110,7 +110,8 @@ def pdf_bibtex():
 
     assert osp.isfile(bib), f"bib file not found {args.bib}"
     pages = _parse_pages(args.pages)
-    metadata_from_bib(pdf, bib, pages, args.keys)
+    # metadata_from_bib(pdf, bib, pages, args.keys)
+    pdf_mod(pdf, bibtex=bib, delete_keys=args.keys, custom_pages=pages)
 
 
 def pdf_metadata():
@@ -129,8 +130,11 @@ def pdf_metadata():
     pages = _parse_pages(args.pages)
     kwargs = {'url': args.url} if args.url else {}
     if any((pages, args.keys, args.title, args.title, args.author, args.year, kwargs)):
-        add_pdf_metadata(args.pdf, author=args.author, title=args.title, year=args.year,
+        pdf_mod(args.pdf, author=args.author, title=args.title, year=args.year,
                         custom_pages=args.pages, delete_keys=args.keys, **kwargs)
+
+        # add_pdf_metadata(args.pdf, author=args.author, title=args.title, year=args.year,
+        #                 custom_pages=args.pages, delete_keys=args.keys, **kwargs)
 
 def not_in_remarkable():
     """ outputs remote files in folder

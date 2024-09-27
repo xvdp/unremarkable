@@ -4,172 +4,193 @@ pdf utilities
 from typing import Optional, Union
 import os
 import os.path as osp
-import numpy as np
 from pprint import pprint
+import numpy as np
 import pypdf
+from pypdf.generic import PdfObject, NameObject, DictionaryObject
 from pybtex.database import parse_file, parse_string
 
-# rewrite pdfs with metadata , locally
-def add_pdf_metadata(pdf: str,
-                     author: Optional[str] = None,
-                     title: Optional[str] = None,
-                     year: Union[str, int, None] = None,
-                     subject: Optional[str] = None,
-                     keywords: Optional[str] = None,
-                     suffix: Union[bool, str] = False,
-                     delete_keys: Union[tuple, bool, None] = None,
-                     custom_pages: Union[int, tuple, list, range, slice, None] = None,
-                     bibtex: Optional[str] = None,
-                     bib_format: str = 'bibtex',
-                     **kwargs):
-    """
-    Args
-        pdf:         (str) valid pdf
 
-    Optional Args
-        title        (str)
-        year         (int, str)
-        keywords     (str)
-        suffix       (str, bool[False]) # if True add '_mod', if str '_{suffix}'
-        delete_keys  (str, tuple, bool) delete unwanted keys if found 
-        custom_pages (int, tuple, range, slice)
-        bibtex       (str) bibtex file, or bibtex string
-        bib_format   (str ['bibtex']) if bibtex passed as string, spec format
-    kwargs: 
-        any custom metadata keys 
-
-    Example:
-    # add only custom metadata keys: will be saved as
-    >>> metadata = {'Species': 'Extra-Terrestrial', # -> '/Species'
-                    'Reference': '8dc72c41-b276-403b-81ff' # -> '/Reference'
-                    }
-    >>> add_pdf_metadata(filename, author=None, **metadata)
-
-    # delete some existing metadata
-    >>> delete_keys =['/CreationDate', '/Producer']
-    >>> add_pdf_metadata(filename, delete_keys=delete_keys)
-
-    # remove first pages and save new file with suffix 
-    >>> for f in pdf_folder:
-    >>>     pages = get_pdf_info(pdfs[0])['pages']
-    >>>     add_pdf_metadata(f, custom_pages=range(1,pages), suffix="nocover")
-
-    # add bibtex to custom data
-    >>> for f in pdf_folder:
-    >>>     add_pdf_metadata(filename.pdf, bibtex=filename.bib)
-    # see bibtext
-    $ pdfinfo filename.pdf -custom
-
-    """
-    if not any([author, title, year, subject, keywords, delete_keys, custom_pages, bibtex, kwargs]):
-        print("no args passed, exiting")
-        return None
-    assert osp.isfile(pdf), f"file not found {pdf}"
-
-    reader = pypdf.PdfReader(pdf)
+def _clone(path):
+    reader = pypdf.PdfReader(path)
     writer = pypdf.PdfWriter()
-    """ TODO FIX: when bibtex  refalready exists 
-    metadata = dict(reader.metadata) if reader.metadata is not None else {}
-        if not data.get(key):
-    TypeError: unhashable type: 'ArrayObject'
-    """
-    metadata = dict(reader.metadata) if reader.metadata is not None else {}
-    # PdfWriter.clean_page
-    author_aliases = ['authors', 'Author']
-    if author is None:
-        for a in author_aliases:
-            if a in kwargs:
-                author = kwargs.pop(a)
-                break
-    if isinstance(author, (list, tuple)):
-        author = ", ".join(author)
-    # add standard keys
-    if year is not None and author is not None:
-        author = f"{author} {year}"
-    add_keys = {'/Author': author, "/Title": title, '/Subject': subject, '/Keywords': keywords}
-    add_keys = {k:v for k,v in add_keys.items() if v is not None}
+    writer.clone_document_from_reader(reader)
+    return reader, writer
 
-    # add custom keys from kwargs
-    for key, val in kwargs.items():
-        _key = f"/{key}"
-        add_keys[_key] = kwargs[key]
-    for key, val in add_keys.items():
-        metadata[key] = val
+def _remove_pages(writer, fro=0, to=None, custom_pages=None):
+    """to, fro | or custom_pages, not both"""
+    if isinstance(custom_pages, slice):
+        fro = custom_pages.start
+        to = custom_pages.stop
+    elif isinstance(custom_pages, int):
+        fro = custom_pages
+        to = custom_pages + 1
+    elif isinstance(custom_pages, list):
+        custom_pages.sort()
+        num_pages = len(writer.pages)
+        j = 0
+        for i in range(num_pages):
+            if i not in custom_pages:
+                del writer.pages[j]
+            else:
+                j +=1
+        return
+    if to is not None:
+        to = -to % len(writer.pages)
+        while to:
+            del writer.pages[-1]
+            to -= 1
+    fro = fro%len(writer.pages)
+    while fro:
+        del writer.pages[0]
+        fro -=1
 
-    if isinstance (bibtex, str):
-        if osp.isfile(bibtex):
-            bibtex = parse_file(bibtex).to_string('bibtex')
+def _parse_bib(metadata):
+    bib = _get_bib(metadata)
+    if bib is not None:
+        if osp.isfile(bib):
+            bib = parse_file(bib)
         else:
-            bibtex = parse_string(bibtex, bib_format=bib_format).to_string('bibtex')
-        print(bibtex)
-        metadata['/Bibtex'] = bibtex
+            bib = parse_string(bib, bib_format='bibtex')
 
-    # delete
-    if delete_keys is not None:
-        if delete_keys is True:
-            delete_keys = [k for k in metadata.keys() if k not in add_keys]
-        elif isinstance(delete_keys, str):
-            delete_keys = [delete_keys]
-        for key in delete_keys:
-            if key in metadata:
-                del metadata[key]
+        metadata["/Bibtex"] = bib.to_string('bibtex')
+        nbentries = len(bib.entries.values())
+        assert nbentries == 1, f"expected 1 bib entry, got {nbentries}"
 
+        authors = []
+        for entry in bib.entries.values():
+            for author in entry.persons['author']:
+                fn = ".".join([f[0] for f in author.first_names])
+                ln = " ".join([f for f in author.last_names])
+                authors.append(f"{fn}. {ln}")
+            year = entry.fields.get('year', '')
+            title = entry.fields.get('title', None)
+            authors = ', '.join(authors)
+            url = entry.fields.get('url', '')
+            code = entry.fields.get('code', '')
+            if year:
+                authors = ' '.join([authors, year])
+        if authors:
+            metadata['/Author'] = authors
+        if title:
+            metadata['/Title'] = title
+        if year:
+            metadata['/Year'] = year
+        if url:
+            metadata['/Url'] = url
+        if code:
+            metadata['/Code'] = code
+
+def _get_bib(metadata):
+    bib = None
+    _keys = ["/Bib", "/Bibtex"]
+    bibkey = [key for key in metadata if key in _keys]
+    if bibkey:
+        bib = metadata.pop(bibkey[0])
+    return bib
+
+def _parse_metadata(reader, **kwargs) -> dict:
+    # get existing metadata
+    metadata = dict(reader.metadata) if reader.metadata is not None else {}
+    # cleanup metadata keys
+    _format_pdf_keys(kwargs)
+    _remove_none_keys(kwargs)
+    # read bibtex
+    _parse_bib(kwargs)
+    metadata.update(**kwargs)
+    return metadata
+
+def _delete_keys(metadata: dict, keys: Union[str, list, tuple, bool, None] = None):
+    """removes unwanted metadata keys"""
+    if keys is None:
+        return
+    if keys is True:
+        keys = list(metadata.keys())
+    elif isinstance(keys, str):
+        keys = [keys]
+    for key in keys:
+        key = _format_pdf_key(key)
+        if key in metadata:
+            del metadata[key]
+
+def _format_pdf_key(key):
+    if key[0] != '/':
+        key =  '/' + key
+    return key[0]+key[1].upper()+key[2:]
+
+def _format_pdf_keys(metadata: dict):
+    """pdf metadata expects keys as /Capitalfirstinitial """
+    keys = list(metadata.keys())
+    for k in keys:
+        key = k
+        key = _format_pdf_key(k)
+        if k != key:
+            metadata[key] = metadata.pop(k)
+
+def _remove_none_keys(metadata: dict):
+    keys = list(metadata.keys())
+    for key in keys:
+        if metadata[key] is None:
+            metadata.pop(key)
+
+def _ext_assert(path, ext):
+    ext = ext.lower()
+    assert osp.isfile(path), f"file <{path}> not found"
+    assert osp.splitext(path)[-1].lower() == ext, f"invalid extension <{path}>, expects {ext}"
+
+def pdf_mod(in_path: Union[str, list, tuple],
+            out_path: Optional[str] = None,
+            fro: int = 0,
+            to: Optional[int] = None,
+            custom_pages: Union[list, int, slice, None] = None,
+            delete_keys: Union[tuple, bool, None] = None,
+            **kwargs):
+    """
+    Utility to adds metadata, including bibtex or any custom key,
+        to delete selected pages or metadata keys, to join multiple pdfs
+    in_path         if list, joins pdfs, keeps only metadata and links for the first.
+    out_path        if None, overwrite in_path or in_path[0]
+    fro, to         page range to keep   
+    delete_keys     from pdf.metadata, True deletes all metadata.
+    kwargs:         All kwargs get added as pdf metadata
+        author
+        year
+        title
+        subject
+        bibtex      if bibtex: author, year, title are overwritten
+            any
+    """
+    # validate io paths
+    join_paths = []
+    if isinstance(in_path, (list, tuple)):
+        join_paths = in_path[1:]
+        in_path = in_path[0]
+        _valid = [_ext_assert(path, ".pdf") for path in join_paths]
+    _ext_assert(in_path, ".pdf")
+    if out_path is None:
+        out_path = in_path
+    else:
+        os.makedirs(osp.expanduser(osp.abspath(osp.dirname(out_path))), exist_ok=True)
+        if osp.splitext(out_path)[-1].lower() != ".pdf":
+            out_path += ".pdf"
+
+    # clone first pdf
+    reader, writer = _clone(in_path)
+    # modify pages, metadata entries, keys
+    _remove_pages(writer, fro, to, custom_pages)
+    metadata = _parse_metadata(reader, **kwargs)
+    _delete_keys(metadata, delete_keys)
     # add metadata field
     writer.add_metadata(metadata)
 
-    # copy pages
-    if custom_pages is None:
-        custom_pages = range(len(reader.pages))
-    elif isinstance(custom_pages, int):
-        custom_pages = (custom_pages,)
-    elif isinstance(custom_pages, slice):
-        custom_pages = range(len(reader.pages))[custom_pages]
-    for i, page in enumerate(reader.pages):
-        if i in custom_pages:
+    # join pdfs
+    for path in join_paths:
+        reader = pypdf.PdfReader(path)
+        for page in reader.pages:
             writer.add_page(page)
 
-    if suffix:
-        if isinstance(suffix, str):
-            suffix = suffix if suffix[0] == "_" else f"_{suffix}"
-        else:
-            suffix = "_mod"
-        out_pdf = suffix.join(osp.splitext(pdf))
-    else:
-        out_pdf = pdf
-
-    with open(out_pdf, 'wb') as output_pdf:
-        writer.write(output_pdf)
-        print(f"Writing file {out_pdf}")
-
-def metadata_from_bib(pdf: str,
-                      bib: str,
-                      custom_pages: Union[int, tuple, list, range, slice, None] = None,
-                      delete_keys: Union[tuple, bool, None] = None,
-                      **kwargs):
-    """ add metadata and bibtex to pdf
-    """
-    assert osp.isfile(pdf), f"pdf not found {pdf}"
-    if osp.isfile(bib):
-        bib = parse_file(bib)
-    else:
-        bib = parse_string(bib, bib_format='bibtex')
-
-    nbentries = len(bib.entries.values())
-    assert nbentries == 1, f"expected 1 bib entry, got {nbentries}"
-
-    authors = []
-    for entry in bib.entries.values():
-        for author in entry.persons['author']:
-            fn = ".".join([f[0] for f in author.first_names])
-            ln = " ".join([f for f in author.last_names])
-            authors.append(f"{fn}. {ln}")
-        year = entry.fields.get('year', '')
-        title = entry.fields.get('title', None)
-        authors = ', '.join(authors)
-        if year:
-            authors = ' '.join([authors, year])
-    add_pdf_metadata(pdf, author=authors, title=title, bibtex=bib.to_string('bibtex'),
-                     custom_pages=custom_pages, delete_keys=delete_keys, **kwargs)
+    with open(out_path, 'wb') as output_file:
+        writer.write(output_file)
 
 
 def get_pdf_info(pdf: str, page: Optional[int] = None, verbose: bool = False) -> Optional[dict]:
@@ -223,7 +244,6 @@ def split_pdf(pdf: str, outname: Optional[str] = None):
     outname = osp.splitext(outname or pdf)[0]
     outname = f"{outname}_%0{len(str(num))}d.pdf"
     for i, page in enumerate(reader.pages):
-        o = outname%i
         writer = pypdf.PdfWriter()
         writer.add_page(page)
         with open(outname%i, 'wb') as output_pdf:

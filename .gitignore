@@ -3,3 +3,5 @@ sandbox*
 *.egg-info/
 version.py
 __pycache__/
+scrapers/
+scripts/
