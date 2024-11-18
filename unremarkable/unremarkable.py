@@ -416,7 +416,7 @@ def ssh_json(json_str: str, name: str, **kwargs) -> int:
     cmd = ['ssh', f'{user}@{host}', cmd]
     return _run_cmd(cmd, check=True, shell=False)
 
-
+# pylint: disable=no-member
 def make_content(pdf):
     """ .content pageCount and sizeInBytes are important
             orientation is useful

@@ -7,7 +7,6 @@ import os.path as osp
 from pprint import pprint
 import numpy as np
 import pypdf
-from pypdf.generic import PdfObject, NameObject, DictionaryObject
 from pybtex.database import parse_file, parse_string
 
 
@@ -17,33 +16,24 @@ def _clone(path):
     writer.clone_document_from_reader(reader)
     return reader, writer
 
-def _remove_pages(writer, fro=0, to=None, custom_pages=None):
-    """to, fro | or custom_pages, not both"""
-    if isinstance(custom_pages, slice):
-        fro = custom_pages.start
-        to = custom_pages.stop
-    elif isinstance(custom_pages, int):
-        fro = custom_pages
-        to = custom_pages + 1
-    elif isinstance(custom_pages, list):
-        custom_pages.sort()
-        num_pages = len(writer.pages)
-        j = 0
-        for i in range(num_pages):
-            if i not in custom_pages:
-                del writer.pages[j]
-            else:
-                j +=1
-        return
-    if to is not None:
-        to = -to % len(writer.pages)
-        while to:
-            del writer.pages[-1]
-            to -= 1
-    fro = fro%len(writer.pages)
-    while fro:
-        del writer.pages[0]
-        fro -=1
+
+def _remove_pages(writer:  pypdf._writer.PdfWriter,
+                  pages: Union[None, int, list, tuple, slice] = None) -> None:
+    """remove pages not in list, from back to front
+    """
+    if pages is not None:
+        num = len(writer.pages)
+        if isinstance(pages, int):
+            pages = [pages]
+        elif isinstance(pages, tuple):
+            pages = list(pages)
+        elif isinstance(pages, slice):
+            pages = list(range(pages.start or 0, pages.stop or num))
+        if len(pages):
+            for i in range(num-1, -1, -1):
+                if i not in pages:
+                    del writer.pages[i]
+
 
 def _parse_bib(metadata):
     bib = _get_bib(metadata)
@@ -115,8 +105,8 @@ def _delete_keys(metadata: dict, keys: Union[str, list, tuple, bool, None] = Non
 
 def _format_pdf_key(key):
     if key[0] != '/':
-        key =  '/' + key
-    return key[0]+key[1].upper()+key[2:]
+        key =  '/' + key[0].upper()+key[1:]
+    return key
 
 def _format_pdf_keys(metadata: dict):
     """pdf metadata expects keys as /Capitalfirstinitial """
@@ -150,7 +140,8 @@ def pdf_mod(in_path: Union[str, list, tuple],
         to delete selected pages or metadata keys, to join multiple pdfs
     in_path         if list, joins pdfs, keeps only metadata and links for the first.
     out_path        if None, overwrite in_path or in_path[0]
-    fro, to         page range to keep   
+    fro, to         page range to keep
+        custom_pages    duplicate code, to remove from __main__
     delete_keys     from pdf.metadata, True deletes all metadata.
     kwargs:         All kwargs get added as pdf metadata
         author
@@ -177,7 +168,9 @@ def pdf_mod(in_path: Union[str, list, tuple],
     # clone first pdf
     reader, writer = _clone(in_path)
     # modify pages, metadata entries, keys
-    _remove_pages(writer, fro, to, custom_pages)
+    if any([to, fro]):
+        custom_pages = slice(fro, to)
+    _remove_pages(writer, custom_pages)
     metadata = _parse_metadata(reader, **kwargs)
     _delete_keys(metadata, delete_keys)
     # add metadata field
@@ -280,11 +273,11 @@ def split_pdf(pdf: str, outname: Optional[str] = None):
     # return size
 
 def convert_page_size(pdf: str,
-                      outname: str,
-                      size: Union[tuple, list, str, float, int],):
-
+                      size: Union[tuple, list, str, float, int],
+                      outname: Optional[str] = None):
     """
     size A0, --A8,
+    outname None, overwrites original.
     """
     reader = pypdf.PdfReader(pdf)
     num = len(reader.pages)
@@ -307,3 +300,20 @@ def convert_page_size(pdf: str,
     for i, page in enumerate(reader.pages):
         page.scale_by(size[0]/width)
         writer.add_page(page)
+
+    with open(outname, 'wb') as output:
+        writer.write(output)
+
+
+def rotate(pdf: str, outname: Optional[str] = None, angle: int = 90):
+    """ rotate multiples of 90
+    outname None, overwrites original.
+    """
+    assert angle % 90, f'multiples of 90, clockwise, got {angle}'
+    reader = pypdf.PdfReader(pdf)
+    writer = pypdf.PdfWriter()
+    for page in reader.pages:
+        writer.add_page(page.rotate(90))
+
+    with open(outname, 'wb') as output:
+        writer.write(output)

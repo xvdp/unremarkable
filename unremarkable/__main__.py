@@ -2,6 +2,7 @@
 console entry points for unremarkable handling of reMarkable files
 
 """
+from typing import Union, Optional, Any
 import argparse
 import os
 import os.path as osp
@@ -10,7 +11,7 @@ import pprint
 from .unremarkable import backup_tablet, upload_pdf, build_file_graph, \
     _is_host_reachable, _get_xochitl, restart_xochitl, get_remote_files
 from .annotations import export_annotated_pdf
-from .pdf import get_pdf_info, pdf_mod
+from .pdf import pdf_mod
 from . import rmscene
 
 _A="\033[0m"
@@ -60,46 +61,64 @@ def pdf_to_remarkable():
     upload_pdf(args.pdf, args.parent, args.name, args.restart_xochitl, args.force)
 
 
-def _parse_pages(pages):
+def _asint(val:Any, msg: str = "") -> int:
+    assert val.isnumeric(), f"expected integer input, got {val}, {msg}"
+    return int(val)
+
+
+def _asslice(pages: str, msg: str = "") -> Optional[slice]:
+    out = pages.split("-")
+    out[0] = 0 if out[0] in ('None', '') else _asint(out[0], msg)
+    out[1] = None if out[1] in ('None', '') else _asint(out[1], msg)
+    if out[0] == out[1]:    # invalid cases [None, None],  [2,2]
+        print(f"\targ -p {pages} invalid slice, nothing done")
+        out = None
+    else:
+        out = slice(*out)
+    return out
+
+
+def _parse_pages(pages: Optional[list]) -> Union[None, int, list, slice]:
+    """ fixed a couple rror cases, TODO move out of __main__
+    """
     if pages is not None:
         assert isinstance(pages, list), f"expected list got {pages}, {type(pages)}"
-        if len(pages) > 1:
-            pages = [int(p) for p in pages]
-        elif '-' in pages[0]:
-            pages = pages[0].split("-")
-            for i, p in enumerate(pages):
-                if p in ('None', ''):
-                    pages[i] = None
-                else:
-                    pages[i] = int(p)
-            pages = slice(*pages)
-        else:
-            pages = int(pages[0])
+        _msg = f"\n\t-p arg syntax expected as <int>, <int int ...>, <int->, <-int>\n\tgot {pages}"
+        if len(pages) > 1:      # case     -p 1 2 45, list
+            pages = [_asint(p, _msg) for p in pages]
+        elif '-' in pages[0]:   # case  -p -2 | -p 1- | -p 1-9 , slice
+            pages = _asslice(pages[0], _msg)
+        else:                   # case -p 2, int
+            pages = _asint(pages[0], _msg)
     return pages
 
 
 def pdf_bibtex():
-    """ entry point to metadata_from_bib
+    """ entry point to add bibtex to pdf
     Args
         pdf     (str) valid pdf file
     optional
         bib     (str) valid bib file - if None looks for pdf.replace('.pdf', '.bib')
+        --name  (str) <filename>.pdf, default overwrites
         --pages (int, list, str) str: 1- slice(1,None)
         --keys  (str, list) # delete keys
-        rename filename.bib to .filename.bib
+        renames  filename.bib to .filename.bib
     """
     parser = argparse.ArgumentParser(description='Add bib to pdf')
     parser.add_argument('pdf', type=str, help='valid .pdf file')
     parser.add_argument('bib', type=str, nargs='?', help='valid .bib file', default=None)
+    parser.add_argument('-n', '--name', type=str, help='create new file with name -n', default=None)
     parser.add_argument('-p', '--pages', nargs='+', default=None,
                         help='page: eg. 2, pages: eg. 1 2 3 or pagerange: eg. 1- or 1-4')
     parser.add_argument('-k', '--keys', nargs='+', default=None, help="delete keys")
+    parser.add_argument('-u', '--url', type=str, help='add url', default=None)
     args = parser.parse_args()
     _pdf, ext = osp.splitext(args.pdf)
     if not osp.isfile(args.pdf) and ext.lower() != '.pdf':
         ext = '.pdf'
     pdf = f'{_pdf}{ext}'
     assert osp.isfile(pdf), f"pdf file not found {pdf}"
+
     bib = args.bib
     if bib is None or not osp.isfile(bib):
         _bib = f'{_pdf}.bib'
@@ -107,31 +126,44 @@ def pdf_bibtex():
         if osp.isfile(_bib):
             os.rename(_bib, __bib)
         bib = __bib if osp.isfile(__bib) else None
+    assert osp.isfile(bib), f"bib file not found {args.bib}, use pdf_metadata for custom keys"
 
-    assert osp.isfile(bib), f"bib file not found {args.bib}"
     pages = _parse_pages(args.pages)
-    # metadata_from_bib(pdf, bib, pages, args.keys)
-    pdf_mod(pdf, bibtex=bib, delete_keys=args.keys, custom_pages=pages)
+    kwargs = {'url': args.url} if args.url else {}
+    pdf_mod(pdf, args.name, bibtex=bib, delete_keys=args.keys, custom_pages=pages, **kwargs)
 
 
 def pdf_metadata():
-    """ add metadata to pdf if no .bib exists - otherwise run pdf_bibtex()
+    """ add metadata to pdf : similar to pdf_bibtex without bibtex, useful shortcut for adding url
+    Args
+        pdf     (str) valid pdf file
+    optional
+        --name      (str) <filename>.pdf, default overwrites
+        --author    (str)
+        --year      (int)
+        --title     (str) 
+        --url       (str)
+        --pages (int, list, str) str: 1- slice(1,None)
+        --keys  (str, list) # delete keys
+        renames  filename.bib to .filename.bib
     """
     parser = argparse.ArgumentParser(description='Add metadata pdf')
     parser.add_argument('pdf', type=str, help='valid .pdf file')
+    parser.add_argument('-n', '--name', type=str, help='create new file with name -n', default=None)
     parser.add_argument('-a', '--author', type=str, nargs='+', help='add authtors', default=None)
     parser.add_argument('-y', '--year', type=int, help='add year', default=None)
     parser.add_argument('-t', '--title', type=str, help='add title', default=None)
     parser.add_argument('-u', '--url', type=str, help='add url', default=None)
     parser.add_argument('-p', '--pages', nargs='+', default=None,
-                        help='page: eg. 2, pages: eg. 1 2 3 or pagerange: eg. 1- or 1-4')
+        help='page: eg. 2, pages: eg. 1 2 3 or pagerange: eg. 1- or 1-4')
     parser.add_argument('-k', '--keys', nargs='+', default=None, help="delete keys")
     args = parser.parse_args()
     pages = _parse_pages(args.pages)
+    _pages = pages or 0
     kwargs = {'url': args.url} if args.url else {}
-    if any((pages, args.keys, args.title, args.title, args.author, args.year, kwargs)):
-        pdf_mod(args.pdf, author=args.author, title=args.title, year=args.year,
-                        custom_pages=args.pages, delete_keys=args.keys, **kwargs)
+    if any((_pages, args.keys, args.title, args.title, args.author, args.year, kwargs)):
+        pdf_mod(args.pdf, args.name, author=args.author, title=args.title, year=args.year,
+                        custom_pages=pages, delete_keys=args.keys, **kwargs)
 
         # add_pdf_metadata(args.pdf, author=args.author, title=args.title, year=args.year,
         #                 custom_pages=args.pages, delete_keys=args.keys, **kwargs)
@@ -170,30 +202,6 @@ def remarkable_restart():
     """ restart remarkable service
     """
     restart_xochitl()
-
-
-def pdf_info():
-    """console entry point to return num pages, and dimensions of a local pdf
-    Args
-        pdf     (str) valid pdf file
-        page     connected = connected ""
-   (int [None]) if page, return width and height for page
-    Example
-        $ pdf_info mypdffile.pdf    # all page widths
-            -> {'pages': num_pages, 'width': [widths], 'height': [heights]}
-        $ pdf_info mypdffile.pdf 1 # width of page 1
-            -> {'pages': num_pages, 'width': widths[1], 'height': heights[1]}
-    """
-    parser = argparse.ArgumentParser(description='pdf info utils')
-    parser.add_argument('pdf', type=str, help='pdf file')
-    parser.add_argument('page', type=int, nargs='?', default=None,
-                        help='get dimension of a single page')
-    args = parser.parse_args()
-    if not osp.isfile(args.pdf) or not args.pdf.lower().endswith('.pdf'):
-        print(f"pass valid .pdf file, got <{args.pdf}> isfile: {osp.isfile(args.pdf)}")
-        help(pdf_info)
-    else:
-        get_pdf_info(args.pdf, args.page, verbose=True)
 
 
 def remarkable_export_annotated():
