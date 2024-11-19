@@ -61,9 +61,12 @@ def pdf_to_remarkable():
     upload_pdf(args.pdf, args.parent, args.name, args.restart_xochitl, args.force)
 
 
-def _asint(val:Any, msg: str = "") -> int:
-    assert val.isnumeric(), f"expected integer input, got {val}, {msg}"
-    return int(val)
+def _asint(val: Any, msg: str = "") -> int:
+    if isinstance(val, str):
+        assert val.isnumeric(), f"expected integer input, got {val}, {msg}"
+        val = int(val)
+    assert isinstance(val, int), f"expected integer input, got {val}, {msg}"
+    return val
 
 
 def _asslice(pages: str, msg: str = "") -> Optional[slice]:

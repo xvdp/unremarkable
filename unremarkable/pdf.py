@@ -29,10 +29,17 @@ def _remove_pages(writer:  pypdf._writer.PdfWriter,
             pages = list(pages)
         elif isinstance(pages, slice):
             pages = list(range(pages.start or 0, pages.stop or num))
+        # allow negative indexing
+        _num_pages = len(pages)
+        pages = [p%num for p in pages if p < num]
+        # only
         if len(pages):
             for i in range(num-1, -1, -1):
                 if i not in pages:
                     del writer.pages[i]
+        elif _num_pages:
+            print(f"Returning all pages, custom pages out of range(0, {num})")
+            # should use warning logging, i know
 
 
 def _parse_bib(metadata):
@@ -130,8 +137,6 @@ def _ext_assert(path, ext):
 
 def pdf_mod(in_path: Union[str, list, tuple],
             out_path: Optional[str] = None,
-            fro: int = 0,
-            to: Optional[int] = None,
             custom_pages: Union[list, int, slice, None] = None,
             delete_keys: Union[tuple, bool, None] = None,
             **kwargs):
@@ -140,8 +145,10 @@ def pdf_mod(in_path: Union[str, list, tuple],
         to delete selected pages or metadata keys, to join multiple pdfs
     in_path         if list, joins pdfs, keeps only metadata and links for the first.
     out_path        if None, overwrite in_path or in_path[0]
-    fro, to         page range to keep
-        custom_pages    duplicate code, to remove from __main__
+    custom_pages    range to keep: None: all
+                        int     single page
+                        list    pages in list
+                        slice   pages in range (0, None), 
     delete_keys     from pdf.metadata, True deletes all metadata.
     kwargs:         All kwargs get added as pdf metadata
         author
@@ -167,9 +174,8 @@ def pdf_mod(in_path: Union[str, list, tuple],
 
     # clone first pdf
     reader, writer = _clone(in_path)
+
     # modify pages, metadata entries, keys
-    if any([to, fro]):
-        custom_pages = slice(fro, to)
     _remove_pages(writer, custom_pages)
     metadata = _parse_metadata(reader, **kwargs)
     _delete_keys(metadata, delete_keys)
