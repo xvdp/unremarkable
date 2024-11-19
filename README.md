@@ -15,13 +15,12 @@ I wrote these code snippets in order to use the reMarkable tablet similar to its
 
 ### info
 ``` bash
-remarkable_help
+$ remarkable_help
 ```
 
 ### upload: local .pdf to reMarkable
 ```bash
-#!/bin/bash
-pdf_to_remarkable <localfile.pdf|*> [parent folder name] --name <visible name> --no_restart
+$ pdf_to_remarkable <localfile.pdf|*> [parent folder name] --name <visible name> --no_restart
 # Args
 #   <local pdf str | *>  existingfile or * 
 # Optional args
@@ -32,16 +31,14 @@ pdf_to_remarkable <localfile.pdf|*> [parent folder name] --name <visible name> -
 ```
 ### download: export merged .pdf and .rm annotations; rm v6 files only
 ``` bash
-remarkable_export_annotated <uuid or name> [page] [folder] [out_name] [xochitl folder]
+$ remarkable_export_annotated <uuid or name> [page] [folder] [out_name] [xochitl folder]
 # exports annotated pdf from local backup
-# only file name is required
 # Only version 6 .rm supported
 ```
 
 ### download: reMarkable to local incremental backup
 ```bash
-#!/bin/bash
-remarkable_backup [<local_folder>]
+$ remarkable_backup [<local_folder>]
 #   local_folder arg optional, default None -> stored path in ~/.xochitl or '.'
 #       if folder passed it must exist.
 #    stores folder to ~/.xochitl file
@@ -50,16 +47,15 @@ remarkable_backup [<local_folder>]
 ```
 ### info: local backed up reMarkable, info,
 ```bash
-#!/bin/bash
+$ remarkable_ls [<local_folder>] # default [.]
 # print reMarkable visible_name file graph on local backup
-remarkable_ls [<local_folder>] # default [.]
 # Example: print uuid of file with visible name "God of Carnage" in local folder
-remarkable_ls . | grep "God of Carnage"
-#         'God of Carnage': '1e6d7bc7-6893-436c-b1e6-99925097cf92',
+    $ remarkable_ls . | grep "God of Carnage"
+    # 'God of Carnage': '1e6d7bc7-6893-436c-b1e6-99925097cf92',
 
-remarkable_read_rm <.rm annotation file> 
+$ remarkable_read_rm <.rm annotation file> 
 # Example
-remarkable_read_rm '3bb743f8-15b9-45a5-87a1-1369dff6769c/6bf1e7b6-8c34-4c7e-85d3-ff9b01039cb0.rm'
+    $ remarkable_read_rm '3bb743f8-15b9-45a5-87a1-1369dff6769c/6bf1e7b6-8c34-4c7e-85d3-ff9b01039cb0.rm'
 ```
 
 ### Other possible useful functions
@@ -96,7 +92,6 @@ pdf_mod(in_path, [out_path, custom_pages, delete_keys, **kwargs])
 # kwargs: author, year, bibtex, url, restart (default True)
 # pdf_mod: bash commands pdf_metadata and pdf_bibtex
 
-
 # python only
 # modifications to local backup
 from unremarkable import get_annotated, remarkable_name, add_authors
@@ -111,7 +106,6 @@ add_authors(filename, authors=('J. Doe', 'P. Einstein'), year=2122, restart=True
 # filename can be uuid, or partial unique name, use `remarkable_name(filename)` to check
 
 pprint.pprint(get_annotated())
-
 ```
 
 
