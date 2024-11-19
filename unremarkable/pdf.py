@@ -105,41 +105,88 @@ def _remove_pages(writer:  pypdf._writer.PdfWriter,
             print(f"Returning all pages, custom pages out of range(0, {num})")
             # should use warning logging, i know
 
-def _parse_bib(metadata):
+
+def _parse_bib(bib: str, bib_format: str = 'bibtex'):
+    """bib formats bibtex, yaml
+        ris, nbib requires plugin install"""
+    if osp.isfile(bib):
+        return parse_file(bib, bib_format=bib_format)
+    return parse_string(bib, bib_format=bib_format)
+
+def _bib_entry_to_dict(record, entry):
+    out = {}
+    if 'type' in entry .__dict__ and 'fields' in entry.__dict__:
+        out = dict(record=record, type=entry.type, **dict(entry.fields.items()))
+        out.update(**_bib_entry_persons(entry))
+    return out
+
+def _bib_entry_persons(entry):
+    out = {}
+    for ptype, names in entry.persons.items():
+        out[ptype] = "and ".join([_get_name(n) for n in names])
+    return out
+
+def _get_name(names):
+    out = ""
+    if names.last_names:
+        out += " ".join(names.last_names)+", "
+    for m in names.first_names:
+        out += m
+        if m[-1] != ".":
+            out += " "
+    for m in names.middle_names:
+        out += m
+        if m[-1] != ".":
+            out += " "
+    return out
+
+def bib_to_dict(in_bib: str, idx: Optional[int] = 0, bib_format: str = 'bibtex') -> Optional[dict]:
+    """ return single bib 
+    bib formats bibtex, yaml
+        requires plugin install ) ris, """
+    if idx is None:
+        return bibs_to_dict(in_bib, bib_format)
+
+    bib = _parse_bib(in_bib, bib_format)
+    if idx < len(bib.entries):
+        record, entry = list(bib.entries.items())[idx]
+        if 'title' in entry.fields:
+            return _bib_entry_to_dict(record, entry)
+    return {}
+
+
+def bibs_to_dict(in_bib: str, bib_format: str = 'bibtex', key='title') -> Optional[dict]:
+    """ return all bibs as a dict of entries {name:{bib etnries}}
+    """
+    bib = _parse_bib(in_bib, bib_format)
+    _msg = ""
+    out = {}
+    for record, entry in bib.entries.items():
+        if 'title' in entry.fields:
+            _entry = _bib_entry_to_dict(record, entry)
+            item = record if key not in _entry else _entry[key]
+            out[item.replace('{', '').replace('}','')] = _entry
+    return out
+
+
+def _import_bib(metadata, bib_format = 'bibtex'):
     bib = _get_bib(metadata)
     if bib is not None:
+        bibdic = bib_to_dict(bib, bib_format=bib_format)
         if osp.isfile(bib):
-            bib = parse_file(bib)
-        else:
-            bib = parse_string(bib, bib_format='bibtex')
+            with open(bib, 'r', encoding='utf8') as fi:
+                bib = fi.read()
+        metadata["/Bibtex"] = bib
 
-        metadata["/Bibtex"] = bib.to_string('bibtex')
-        nbentries = len(bib.entries.values())
-        assert nbentries == 1, f"expected 1 bib entry, got {nbentries}"
+        author = bibdic.get('author')
+        if len(author.split(' and ')) > 2:
+            author = author.split(' and ')[0] + " et.al."
+            author += " " + bibdic.get('year', '')
+            metadata['/Author'] = author
 
-        authors = []
-        for entry in bib.entries.values():
-            for author in entry.persons['author']:
-                fn = ".".join([f[0] for f in author.first_names])
-                ln = " ".join([f for f in author.last_names])
-                authors.append(f"{fn}. {ln}")
-            year = entry.fields.get('year', '')
-            title = entry.fields.get('title', None)
-            authors = ', '.join(authors)
-            url = entry.fields.get('url', '')
-            code = entry.fields.get('code', '')
-            if year:
-                authors = ' '.join([authors, year])
-        if authors:
-            metadata['/Author'] = authors
-        if title:
-            metadata['/Title'] = title
-        if year:
-            metadata['/Year'] = year
-        if url:
-            metadata['/Url'] = url
-        if code:
-            metadata['/Code'] = code
+        for key in ['title', 'year', 'url', 'code']:
+            if key in bibdic:
+                metadata[_format_pdf_key(key)] = bibdic[key]
 
 def _get_bib(metadata):
     bib = None
@@ -156,7 +203,7 @@ def _parse_metadata(reader, **kwargs) -> dict:
     _format_pdf_keys(kwargs)
     _remove_none_keys(kwargs)
     # read bibtex
-    _parse_bib(kwargs)
+    _import_bib(kwargs)
     metadata.update(**kwargs)
     return metadata
 
