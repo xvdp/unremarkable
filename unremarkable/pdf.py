@@ -1,5 +1,11 @@
 """@xvdp
 pdf utilities
+
+pdf_mod() # add metadata, bibtex, modify page range
+
+# non metadata & links preserving
+rotate()  # rotate all pages in a pdf
+doublepage() # convert to 2 page view
 """
 from typing import Optional, Union
 import os
@@ -9,6 +15,64 @@ import numpy as np
 import pypdf
 from pybtex.database import parse_file, parse_string
 
+
+def pdf_mod(in_path: Union[str, list, tuple],
+            out_path: Optional[str] = None,
+            custom_pages: Union[list, int, slice, None] = None,
+            delete_keys: Union[tuple, bool, None] = None,
+            **kwargs):
+    """
+    Utility to adds metadata, including bibtex or any custom key,
+        to delete selected pages or metadata keys, to join multiple pdfs
+    in_path         if list, joins pdfs, keeps only metadata and links for the first.
+    out_path        if None, overwrite in_path or in_path[0]
+    custom_pages    range to keep: None: all
+                        int     single page
+                        list    pages in list
+                        slice   pages in range (0, None), 
+    delete_keys     from pdf.metadata, True deletes all metadata.
+    kwargs:         All kwargs get added as pdf metadata
+        author
+        year
+        title
+        subject
+        bibtex      if bibtex: author, year, title are overwritten
+            any
+    """
+    # validate io paths
+    join_paths = []
+    if isinstance(in_path, (list, tuple)):
+        join_paths = in_path[1:]
+        in_path = in_path[0]
+        _valid = [_ext_assert(path, ".pdf") for path in join_paths]
+    _ext_assert(in_path, ".pdf")
+    if out_path is None:
+        out_path = in_path
+    else:
+        os.makedirs(osp.expanduser(osp.abspath(osp.dirname(out_path))), exist_ok=True)
+        if osp.splitext(out_path)[-1].lower() != ".pdf":
+            out_path += ".pdf"
+
+    # clone first pdf
+    reader, writer = _clone(in_path)
+
+    # modify pages, metadata entries, keys
+    _remove_pages(writer, custom_pages)
+    metadata = _parse_metadata(reader, **kwargs)
+    _delete_keys(metadata, delete_keys)
+    # add metadata field
+    writer.add_metadata(metadata)
+
+    # join pdfs
+    for path in join_paths:
+        reader = pypdf.PdfReader(path)
+        for page in reader.pages:
+            writer.add_page(page)
+
+    writer.compress_identical_objects()
+
+    with open(out_path, 'wb') as output_file:
+        writer.write(output_file)
 
 def _clone(path):
     reader = pypdf.PdfReader(path)
@@ -36,11 +100,10 @@ def _remove_pages(writer:  pypdf._writer.PdfWriter,
         if len(pages):
             for i in range(num-1, -1, -1):
                 if i not in pages:
-                    del writer.pages[i]
+                    writer.remove_page(i, clean=True)
         elif _num_pages:
             print(f"Returning all pages, custom pages out of range(0, {num})")
             # should use warning logging, i know
-
 
 def _parse_bib(metadata):
     bib = _get_bib(metadata)
@@ -134,62 +197,6 @@ def _ext_assert(path, ext):
     ext = ext.lower()
     assert osp.isfile(path), f"file <{path}> not found"
     assert osp.splitext(path)[-1].lower() == ext, f"invalid extension <{path}>, expects {ext}"
-
-def pdf_mod(in_path: Union[str, list, tuple],
-            out_path: Optional[str] = None,
-            custom_pages: Union[list, int, slice, None] = None,
-            delete_keys: Union[tuple, bool, None] = None,
-            **kwargs):
-    """
-    Utility to adds metadata, including bibtex or any custom key,
-        to delete selected pages or metadata keys, to join multiple pdfs
-    in_path         if list, joins pdfs, keeps only metadata and links for the first.
-    out_path        if None, overwrite in_path or in_path[0]
-    custom_pages    range to keep: None: all
-                        int     single page
-                        list    pages in list
-                        slice   pages in range (0, None), 
-    delete_keys     from pdf.metadata, True deletes all metadata.
-    kwargs:         All kwargs get added as pdf metadata
-        author
-        year
-        title
-        subject
-        bibtex      if bibtex: author, year, title are overwritten
-            any
-    """
-    # validate io paths
-    join_paths = []
-    if isinstance(in_path, (list, tuple)):
-        join_paths = in_path[1:]
-        in_path = in_path[0]
-        _valid = [_ext_assert(path, ".pdf") for path in join_paths]
-    _ext_assert(in_path, ".pdf")
-    if out_path is None:
-        out_path = in_path
-    else:
-        os.makedirs(osp.expanduser(osp.abspath(osp.dirname(out_path))), exist_ok=True)
-        if osp.splitext(out_path)[-1].lower() != ".pdf":
-            out_path += ".pdf"
-
-    # clone first pdf
-    reader, writer = _clone(in_path)
-
-    # modify pages, metadata entries, keys
-    _remove_pages(writer, custom_pages)
-    metadata = _parse_metadata(reader, **kwargs)
-    _delete_keys(metadata, delete_keys)
-    # add metadata field
-    writer.add_metadata(metadata)
-
-    # join pdfs
-    for path in join_paths:
-        reader = pypdf.PdfReader(path)
-        for page in reader.pages:
-            writer.add_page(page)
-
-    with open(out_path, 'wb') as output_file:
-        writer.write(output_file)
 
 
 def get_pdf_info(pdf: str, page: Optional[int] = None, verbose: bool = False) -> Optional[dict]:
@@ -310,16 +317,76 @@ def convert_page_size(pdf: str,
     with open(outname, 'wb') as output:
         writer.write(output)
 
-
-def rotate(pdf: str, outname: Optional[str] = None, angle: int = 90):
+##
+# pdf manipulations sketchbook
+#
+def rotate(pdf: str,
+           outname: Optional[str] = None,
+           angle: int = 90,
+           pages: Union[list, tuple, int, None] = None):
     """ rotate multiples of 90
     outname None, overwrites original.
     """
     assert angle % 90, f'multiples of 90, clockwise, got {angle}'
     reader = pypdf.PdfReader(pdf)
     writer = pypdf.PdfWriter()
-    for page in reader.pages:
-        writer.add_page(page.rotate(90))
-
+    if isinstance(pages, tuple):
+        pages = list(pages)
+    elif isinstance(pages, int):
+        pages = [pages]
+    for i, page in enumerate(reader.pages):
+        if pages is None or i in pages:
+            writer.add_page(page.rotate(90))
+        else:
+            writer.add_page(page)
     with open(outname, 'wb') as output:
         writer.write(output)
+
+
+def _getmeanpage(reader):
+    w, h = np.stack([np.array(reader.pages[i].mediabox[2:]) for i in range(len(reader.pages))]).T
+    if len(np.unique(w)) > 1:
+        w_ = w[np.abs(w - w.mean()) < w.std()]
+        w_mean = w_.mean() if len(np.unique(w_)) > 1 else w_[0]
+    else:
+        w_mean = w[0]
+    if len(np.unique(h)) > 1:
+        h_ = w[np.abs(h - h.mean()) < h.std()]
+        h_mean = h_.mean() if len(np.unique(h_)) > 1 else h_[0]
+    else:
+        h_mean = h[0]
+    return w_mean, h_mean
+
+def _add_suffix(suffix, fname):
+    return fname.replace('.',f'{suffix}.')
+
+def _write_pdf(wr, fname, suffix=''):
+    with open(_add_suffix(suffix, fname) , 'wb') as fi:
+        wr.write(fi)
+
+# pylint: disable=no-member
+def doublepage(input_path, suffix='_2page', edge=0):
+    """ converts to 2 page view
+
+    """
+    reader = pypdf.PdfReader(input_path)
+    num = len(reader.pages)
+    w,h = _getmeanpage(reader)
+    if not edge:
+        w_t = float(w)
+        h_t = 0
+        w = pypdf.generic._base.FloatObject(float(w*2))
+    else:
+        w_t = 0
+        h_t = float(h)
+        h = pypdf.generic._base.FloatObject(float(h*2))
+    writer = pypdf.PdfWriter()
+    for i, page in enumerate(reader.pages):
+        if not i%2:
+            p = writer.add_blank_page(w, h)
+            writer.pages[-1].merge_page(reader.pages[i])
+            if i < num -1:
+                writer.pages[-1].merge_translated_page(reader.pages[i+1],
+                                                       w_t, h_t, over=True,
+                                                       expand=True)
+    _write_pdf(writer, input_path, suffix)

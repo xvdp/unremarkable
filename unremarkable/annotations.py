@@ -632,6 +632,7 @@ def get_xform(data: dict) -> tuple:
     rm_ratio = 1872/1404 # points?
     rm_width = 1929.5    # pixels?
     rm_height = rm_width*4/3
+    scale_x, scale_y =  1, 1
 
     if data['orientation'] == 'landscape':
         rm_width, rm_height = rm_height, rm_width
