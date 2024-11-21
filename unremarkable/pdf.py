@@ -116,7 +116,8 @@ def _parse_bib(bib: str, bib_format: str = 'bibtex'):
 def _bib_entry_to_dict(record, entry):
     out = {}
     if 'type' in entry .__dict__ and 'fields' in entry.__dict__:
-        out = dict(record=record, type=entry.type, **dict(entry.fields.items()))
+        out = dict(entry.fields.items())
+        out.update(record=record, entry_type=entry.type)
         out.update(**_bib_entry_persons(entry))
     return out
 
