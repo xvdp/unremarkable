@@ -1,26 +1,34 @@
 """@xvdp
 pdf utilities
 
-pdf_mod() # add metadata, bibtex, modify page range
+# entry point to __main__.pdf_bibtex __main__.pdf_metadata
+>> pdf_mod() # add metadata, bibtex, url, author ...modify page range
+    TODO: fix. explicit metadata should override bibtex custom keys when both
+    bibtex and metdadata custom keys are passed
 
 # non metadata & links preserving
-rotate()  # rotate all pages in a pdf
-doublepage() # convert to 2 page view
+>> split_pdf() # create one pdf per page
+>> rotate()  # rotate all pages in a pdf
+>> doublepage() # convert to 2 page view
+>> convert_page_size() # scale sizes
 """
-from typing import Optional, Union
+from typing import Optional, Union, Any, Tuple
 import os
 import os.path as osp
 from pprint import pprint
 import numpy as np
 import pypdf
+from pypdf import PdfReader, PdfWriter
 from pybtex.database import parse_file, parse_string
+
+FloatType = Union[float, np.float64]
 
 
 def pdf_mod(in_path: Union[str, list, tuple],
             out_path: Optional[str] = None,
             custom_pages: Union[list, int, slice, None] = None,
             delete_keys: Union[tuple, bool, None] = None,
-            **kwargs):
+            **kwargs) -> None:
     """
     Utility to adds metadata, including bibtex or any custom key,
         to delete selected pages or metadata keys, to join multiple pdfs
@@ -65,23 +73,24 @@ def pdf_mod(in_path: Union[str, list, tuple],
 
     # join pdfs
     for path in join_paths:
-        reader = pypdf.PdfReader(path)
+        reader = PdfReader(path)
         for page in reader.pages:
             writer.add_page(page)
 
+     # not sure if this does anything, it does not clean ophaned links.
     writer.compress_identical_objects()
 
     with open(out_path, 'wb') as output_file:
         writer.write(output_file)
 
-def _clone(path):
-    reader = pypdf.PdfReader(path)
-    writer = pypdf.PdfWriter()
+def _clone(path: str) -> Tuple[PdfReader, PdfWriter]:
+    reader = PdfReader(path)
+    writer = PdfWriter()
     writer.clone_document_from_reader(reader)
     return reader, writer
 
 
-def _remove_pages(writer:  pypdf._writer.PdfWriter,
+def _remove_pages(writer: PdfWriter,
                   pages: Union[None, int, list, tuple, slice] = None) -> None:
     """remove pages not in list, from back to front
     """
@@ -106,14 +115,14 @@ def _remove_pages(writer:  pypdf._writer.PdfWriter,
             # should use warning logging, i know
 
 
-def _parse_bib(bib: str, bib_format: str = 'bibtex'):
+def _parse_bib(bib: str, bib_format: str = 'bibtex') -> Any:
     """bib formats bibtex, yaml
         ris, nbib requires plugin install"""
     if osp.isfile(bib):
         return parse_file(bib, bib_format=bib_format)
     return parse_string(bib, bib_format=bib_format)
 
-def _bib_entry_to_dict(record, entry):
+def _bib_entry_to_dict(record, entry) -> dict:
     out = {}
     if 'type' in entry .__dict__ and 'fields' in entry.__dict__:
         out = dict(entry.fields.items())
@@ -121,13 +130,13 @@ def _bib_entry_to_dict(record, entry):
         out.update(**_bib_entry_persons(entry))
     return out
 
-def _bib_entry_persons(entry):
+def _bib_entry_persons(entry) -> dict:
     out = {}
     for ptype, names in entry.persons.items():
         out[ptype] = "and ".join([_get_name(n) for n in names])
     return out
 
-def _get_name(names):
+def _get_name(names) -> str:
     out = ""
     if names.last_names:
         out += " ".join(names.last_names)+", "
@@ -156,11 +165,10 @@ def bib_to_dict(in_bib: str, idx: Optional[int] = 0, bib_format: str = 'bibtex')
     return {}
 
 
-def bibs_to_dict(in_bib: str, bib_format: str = 'bibtex', key='title') -> Optional[dict]:
-    """ return all bibs as a dict of entries {name:{bib etnries}}
+def bibs_to_dict(in_bib: str, bib_format: str = 'bibtex', key: str = 'title') -> Optional[dict]:
+    """ return all bibs as a dict of entries {<key arg>:{bib entries}}
     """
     bib = _parse_bib(in_bib, bib_format)
-    _msg = ""
     out = {}
     for record, entry in bib.entries.items():
         if 'title' in entry.fields:
@@ -170,7 +178,7 @@ def bibs_to_dict(in_bib: str, bib_format: str = 'bibtex', key='title') -> Option
     return out
 
 
-def _import_bib(metadata, bib_format = 'bibtex'):
+def _import_bib(metadata: dict, bib_format: str = 'bibtex') -> None:
     bib = _get_bib(metadata)
     if bib is not None:
         bibdic = bib_to_dict(bib, bib_format=bib_format)
@@ -189,7 +197,7 @@ def _import_bib(metadata, bib_format = 'bibtex'):
             if key in bibdic:
                 metadata[_format_pdf_key(key)] = bibdic[key]
 
-def _get_bib(metadata):
+def _get_bib(metadata: dict) -> dict:
     bib = None
     _keys = ["/Bib", "/Bibtex"]
     bibkey = [key for key in metadata if key in _keys]
@@ -197,7 +205,7 @@ def _get_bib(metadata):
         bib = metadata.pop(bibkey[0])
     return bib
 
-def _parse_metadata(reader, **kwargs) -> dict:
+def _parse_metadata(reader: PdfReader, **kwargs) -> dict:
     # get existing metadata
     metadata = dict(reader.metadata) if reader.metadata is not None else {}
     # cleanup metadata keys
@@ -208,7 +216,7 @@ def _parse_metadata(reader, **kwargs) -> dict:
     metadata.update(**kwargs)
     return metadata
 
-def _delete_keys(metadata: dict, keys: Union[str, list, tuple, bool, None] = None):
+def _delete_keys(metadata: dict, keys: Union[str, list, tuple, bool, None] = None) -> None:
     """removes unwanted metadata keys"""
     if keys is None:
         return
@@ -221,12 +229,12 @@ def _delete_keys(metadata: dict, keys: Union[str, list, tuple, bool, None] = Non
         if key in metadata:
             del metadata[key]
 
-def _format_pdf_key(key):
+def _format_pdf_key(key: str) -> str:
     if key[0] != '/':
         key =  '/' + key[0].upper()+key[1:]
     return key
 
-def _format_pdf_keys(metadata: dict):
+def _format_pdf_keys(metadata: dict) -> None:
     """pdf metadata expects keys as /Capitalfirstinitial """
     keys = list(metadata.keys())
     for k in keys:
@@ -235,13 +243,13 @@ def _format_pdf_keys(metadata: dict):
         if k != key:
             metadata[key] = metadata.pop(k)
 
-def _remove_none_keys(metadata: dict):
+def _remove_none_keys(metadata: dict) -> None:
     keys = list(metadata.keys())
     for key in keys:
         if metadata[key] is None:
             metadata.pop(key)
 
-def _ext_assert(path, ext):
+def _ext_assert(path: str, ext: str) -> None:
     ext = ext.lower()
     assert osp.isfile(path), f"file <{path}> not found"
     assert osp.splitext(path)[-1].lower() == ext, f"invalid extension <{path}>, expects {ext}"
@@ -255,11 +263,12 @@ def get_pdf_info(pdf: str, page: Optional[int] = None, verbose: bool = False) ->
         page    (int [None]) page number to get info from / if w and h vary
         verbose (bool [Fales]) if True pprint() and return None
 
-    linux native pdfinfo is more complete, this is for internal use
+    TODO: internalize  for special cases,
+    native pdfinfo is more complete
     """
     assert osp.isfile(pdf)
     with open(pdf, 'rb') as _fi:
-        red = pypdf.PdfReader(_fi)
+        red = PdfReader(_fi)
         num = len(red.pages)
         if page is None:
             height = [p.mediabox.height for p in red.pages]
@@ -290,15 +299,15 @@ def get_pdfs(folder: str, key: Optional[str] = None) -> list:
     return pdfs
 
 
-def split_pdf(pdf: str, outname: Optional[str] = None):
+def split_pdf(pdf: str, outname: Optional[str] = None) -> None:
     """ saves one pdf per page
     """
-    reader = pypdf.PdfReader(pdf)
+    reader = PdfReader(pdf)
     num = len(reader.pages)
     outname = osp.splitext(outname or pdf)[0]
     outname = f"{outname}_%0{len(str(num))}d.pdf"
     for i, page in enumerate(reader.pages):
-        writer = pypdf.PdfWriter()
+        writer = PdfWriter()
         writer.add_page(page)
         with open(outname%i, 'wb') as output_pdf:
             writer.write(output_pdf)
@@ -335,30 +344,33 @@ def split_pdf(pdf: str, outname: Optional[str] = None):
 
 def convert_page_size(pdf: str,
                       size: Union[tuple, list, str, float, int],
-                      outname: Optional[str] = None):
+                      outname: Optional[str] = None) -> None:
     """
     size A0, --A8,
     outname None, overwrites original.
+    TODO use _clone and test , scaleby should work
     """
-    reader = pypdf.PdfReader(pdf)
-    num = len(reader.pages)
+    reader = PdfReader(pdf)
+    # num = len(reader.pages)
     width = [p.mediabox.width for p in reader.pages]
     height = [p.mediabox.height for p in reader.pages]
     width = np.unique(width)[np.argmin(np.abs(np.unique(width) - np.mean(width)))]
     height = np.unique(height)[np.argmin(np.abs(np.unique(height) - np.mean(height)))]
+    _Sz = pypdf.PaperSize.__dict__
 
     if isinstance(size, (float, int)):
         size = (round(size*width), round(size*float))
-    if isinstance(size, str):
-        # size = _sizes(size, dpi)
-        size = tuple(pypdf.PaperSize.__dict__[size])
-    assert isinstance(size, (tuple, list)) and len(size) == 2, f"invalid size spec '{size}', tuple in mm reqd."
+    elif isinstance(size, str):
+        assert size in _Sz, f"invalid size {size}, {[k for k in _Sz if k[0] != '_']}"
+        size = tuple(_Sz[size])
+    assert isinstance(size, (tuple, list)) and len(size) == 2, \
+            f"invalid size spec '{size}', tuple in mm reqd."
     size = list(size)
     if width > height:
         size = size[::-1]
 
-    writer = pypdf.PdfWriter()
-    for i, page in enumerate(reader.pages):
+    writer = PdfWriter()
+    for _, page in enumerate(reader.pages):
         page.scale_by(size[0]/width)
         writer.add_page(page)
 
@@ -371,13 +383,13 @@ def convert_page_size(pdf: str,
 def rotate(pdf: str,
            outname: Optional[str] = None,
            angle: int = 90,
-           pages: Union[list, tuple, int, None] = None):
+           pages: Union[list, tuple, int, None] = None) -> None:
     """ rotate multiples of 90
     outname None, overwrites original.
     """
     assert angle % 90, f'multiples of 90, clockwise, got {angle}'
-    reader = pypdf.PdfReader(pdf)
-    writer = pypdf.PdfWriter()
+    reader = PdfReader(pdf)
+    writer = PdfWriter()
     if isinstance(pages, tuple):
         pages = list(pages)
     elif isinstance(pages, int):
@@ -391,7 +403,7 @@ def rotate(pdf: str,
         writer.write(output)
 
 
-def _getmeanpage(reader):
+def _getmeanpage(reader: PdfReader) -> Tuple[FloatType, FloatType]:
     w, h = np.stack([np.array(reader.pages[i].mediabox[2:]) for i in range(len(reader.pages))]).T
     if len(np.unique(w)) > 1:
         w_ = w[np.abs(w - w.mean()) < w.std()]
@@ -405,33 +417,32 @@ def _getmeanpage(reader):
         h_mean = h[0]
     return w_mean, h_mean
 
-def _add_suffix(suffix, fname):
+def _add_suffix(suffix: str, fname: str) -> str:
     return fname.replace('.',f'{suffix}.')
 
-def _write_pdf(wr, fname, suffix=''):
+def _write_pdf(wr: PdfWriter, fname: str, suffix: str = '') -> None:
     with open(_add_suffix(suffix, fname) , 'wb') as fi:
         wr.write(fi)
 
 # pylint: disable=no-member
-def doublepage(input_path, suffix='_2page', edge=0):
+def doublepage(input_path: str, suffix: str = '_2page', edge: int = 0) -> None:
     """ converts to 2 page view
-
     """
-    reader = pypdf.PdfReader(input_path)
+    reader = PdfReader(input_path)
     num = len(reader.pages)
     w,h = _getmeanpage(reader)
     if not edge:
         w_t = float(w)
         h_t = 0
-        w = pypdf.generic._base.FloatObject(float(w*2))
+        w = pypdf.generic.FloatObject(float(w*2))
     else:
         w_t = 0
         h_t = float(h)
-        h = pypdf.generic._base.FloatObject(float(h*2))
-    writer = pypdf.PdfWriter()
-    for i, page in enumerate(reader.pages):
+        h = pypdf.generic.FloatObject(float(h*2))
+    writer = PdfWriter()
+    for i, _ in enumerate(reader.pages):
         if not i%2:
-            p = writer.add_blank_page(w, h)
+            writer.add_blank_page(w, h)
             writer.pages[-1].merge_page(reader.pages[i])
             if i < num -1:
                 writer.pages[-1].merge_translated_page(reader.pages[i+1],
