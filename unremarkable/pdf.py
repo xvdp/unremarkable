@@ -15,6 +15,7 @@ pdf utilities
 from typing import Optional, Union, Any, Tuple
 import os
 import os.path as osp
+import re
 from pprint import pprint
 import numpy as np
 import pypdf
@@ -119,8 +120,8 @@ def _parse_bib(bib: str, bib_format: str = 'bibtex') -> Any:
     """bib formats bibtex, yaml
         ris, nbib requires plugin install"""
     if osp.isfile(bib):
-        return parse_file(bib, bib_format=bib_format)
-    return parse_string(bib, bib_format=bib_format)
+        return parse_file(bib, bib_format=bib_format).lower()
+    return parse_string(bib, bib_format=bib_format).lower()
 
 def _bib_entry_to_dict(record, entry) -> dict:
     out = {}
@@ -154,15 +155,16 @@ def bib_to_dict(in_bib: str, idx: Optional[int] = 0, bib_format: str = 'bibtex')
     """ return single bib 
     bib formats bibtex, yaml
         requires plugin install ) ris, """
+    out = {}
     if idx is None:
-        return bibs_to_dict(in_bib, bib_format)
-
-    bib = _parse_bib(in_bib, bib_format)
-    if idx < len(bib.entries):
-        record, entry = list(bib.entries.items())[idx]
-        if 'title' in entry.fields:
-            return _bib_entry_to_dict(record, entry)
-    return {}
+        out = bibs_to_dict(in_bib, bib_format)
+    else:
+        bib = _parse_bib(in_bib, bib_format)
+        if idx < len(bib.entries):
+            record, entry = list(bib.entries.items())[idx]
+            if 'title' in entry.fields:
+                out = _bib_entry_to_dict(record, entry)
+    return out
 
 
 def bibs_to_dict(in_bib: str, bib_format: str = 'bibtex', key: str = 'title') -> Optional[dict]:
@@ -177,6 +179,8 @@ def bibs_to_dict(in_bib: str, bib_format: str = 'bibtex', key: str = 'title') ->
             out[item.replace('{', '').replace('}','')] = _entry
     return out
 
+def _bib_lowercase(match):
+    return match.group(1) + match.group(2).lower() + "{"
 
 def _import_bib(metadata: dict, bib_format: str = 'bibtex') -> None:
     bib = _get_bib(metadata)
@@ -185,7 +189,7 @@ def _import_bib(metadata: dict, bib_format: str = 'bibtex') -> None:
         if osp.isfile(bib):
             with open(bib, 'r', encoding='utf8') as fi:
                 bib = fi.read()
-        metadata["/Bibtex"] = bib
+        metadata["/Bibtex"] = re.sub(r'(^|\n)(.*?)\{', _bib_lowercase, bib)
 
         author = bibdic.get('author')
         if len(author.split(' and ')) > 2:
