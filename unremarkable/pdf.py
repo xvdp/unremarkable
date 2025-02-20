@@ -46,7 +46,7 @@ def pdf_mod(in_path: Union[str, list, tuple],
         title
         subject
         bibtex      if bibtex: author, year, title are overwritten
-            any
+        require     required keys for bibtex to be imported, e.g. 'title'
     """
     # validate io paths
     join_paths = []
@@ -162,8 +162,7 @@ def bib_to_dict(in_bib: str, idx: Optional[int] = 0, bib_format: str = 'bibtex')
         bib = _parse_bib(in_bib, bib_format)
         if idx < len(bib.entries):
             record, entry = list(bib.entries.items())[idx]
-            if 'title' in entry.fields:
-                out = _bib_entry_to_dict(record, entry)
+            out = _bib_entry_to_dict(record, entry)
     return out
 
 
@@ -173,26 +172,58 @@ def bibs_to_dict(in_bib: str, bib_format: str = 'bibtex', key: str = 'title') ->
     bib = _parse_bib(in_bib, bib_format)
     out = {}
     for record, entry in bib.entries.items():
-        if 'title' in entry.fields:
-            _entry = _bib_entry_to_dict(record, entry)
-            item = record if key not in _entry else _entry[key]
-            out[item.replace('{', '').replace('}','')] = _entry
+        _entry = _bib_entry_to_dict(record, entry)
+        item = record if key not in _entry else _entry[key]
+        out[item.replace('{', '').replace('}','')] = _entry
     return out
 
-def _bib_lowercase(match):
-    return match.group(1) + match.group(2).lower() + "{"
 
-def _import_bib(metadata: dict, bib_format: str = 'bibtex') -> None:
+def _format_bib(bib: str):
+    def _bib_brackets(match):
+        return f'{match.group(1)}{{{match.group(2)}}}'
+    def _bib_lowercase(match):
+        return match.group(1) + match.group(2).lower() + "{"
+
+    _quotes =  r'(\n\s*[^=]+=\s*)"(.*?)"'
+    _upper = r'(^|\n)(.*?)\{'
+    bib = re.sub(_quotes, _bib_brackets, bib)
+    return re.sub(_upper, _bib_lowercase, bib)
+
+def format_bib(bib: str) -> str:
+    if osp.isfile(bib):
+        bibname = bib
+        with open(bib, 'r', encoding='utf8') as fi:
+            bib = _format_bib(fi.read())
+        with open(bibname, 'w', encoding='utf8') as fi:
+            fi.write(bib)
+    else:
+        bib = _format_bib(bib)
+    return bib
+
+def _import_bib(metadata: dict,
+                bib_format: str = 'bibtex',
+                require: Union[list, tuple, str, None] = None) -> None:
     bib = _get_bib(metadata)
     if bib is not None:
         bibdic = bib_to_dict(bib, bib_format=bib_format)
         if osp.isfile(bib):
             with open(bib, 'r', encoding='utf8') as fi:
                 bib = fi.read()
-        metadata["/Bibtex"] = re.sub(r'(^|\n)(.*?)\{', _bib_lowercase, bib)
 
+        if require is not None:
+            if isinstance(require, str):
+                require = [require]
+            for key in require:
+                if bibdic.get(key, None) is None:
+                    print(f'required key {key} missing in {bibdic}, bibtex not added')
+                    return
+        # bib = re.sub(r'(\n[^=]+=)"(.*?)"', _bib_brackets, bib)
+        # bib = re.sub(r'(^|\n)(.*?)\{', _bib_lowercase, bib)
+
+        metadata["/Bibtex"] = _format_bib(bib)
         author = bibdic.get('author')
-        if len(author.split(' and ')) > 2:
+
+        if author is not None and len(author.split(' and ')) > 2:
             author = author.split(' and ')[0] + " et.al."
             author += " " + bibdic.get('year', '')
             metadata['/Author'] = author
