@@ -21,6 +21,7 @@ import numpy as np
 import pypdf
 from pypdf import PdfReader, PdfWriter
 from pybtex.database import parse_file, parse_string
+from PIL import Image
 
 FloatType = Union[float, np.float64]
 
@@ -484,3 +485,69 @@ def doublepage(input_path: str, suffix: str = '_2page', edge: int = 0) -> None:
                                                        w_t, h_t, over=True,
                                                        expand=True)
     _write_pdf(writer, input_path, suffix)
+
+
+def _get_files(path: Union[str, tuple, list, None] = None,
+                  sort_order: Optional[str] = None,
+                  exts: Union[tuple, list] = ('.pdf', '.jpg','.jpeg', '.png')) -> list:
+    """
+    sort_order:     None, getctime, getmtime, getsize
+    """
+    if path is None:
+        path = os.getcwd()
+
+    if isinstance(path, str):
+        assert osp.isdir(path), f'path {path} not a folder'
+        path = osp.expanduser(osp.abspath(path))
+        path = [f.path for f in os.scandir(osp.abspath(path))
+                if osp.splitext(f.name)[-1].lower() in exts]
+        kw = {"key": lambda x:  getattr(osp, sort_order)(x)} if isinstance(sort_order, str) else {}
+        path = sorted(path, **kw)
+    elif isinstance(path, (list, tuple)):
+        path = [osp.expanduser(osp.abspath(p)) for p in path]
+        for p in path:
+            assert osp.isfile(p), f"{p} is not a valid file"
+            _ext = osp.splitext(p)[-1]
+            assert _ext.lower() in exts, f"file {p} has invalid ext, expected {exts}"
+    assert isinstance(path, (list, tuple)), f"expected list of files, found type {type(path)}"
+    return path
+
+
+def make_pdf(path: Union[str, tuple, list, None] = None,
+             out_path: Optional[str] = None,
+             sort_order: Optional[str] = None):
+    """
+    path        None:           current path
+                str:            folder
+                list | tuple:   files/  pdfs jpgs, pngs
+    out_path    None:   folder name
+    sort_order  None:   if input path is not a list, alphabetical
+                str:    ctime, mtime
+    kwargs
+        url, author, year, bibtex
+    """
+    exts = ['.pdf', '.jpg','.jpeg', '.png']
+    paths = _get_files(path, sort_order, exts)
+    if not paths:
+        print('no valid files found, exiting ...')
+        return
+
+    if out_path is None:
+        out_path = f"{osp.split(paths[0])[0]}.pdf"
+        assert not osp.isfile(out_path), f"file conflict, {out_path} exists, nothing done."
+
+    writer = PdfWriter()
+    for path in paths:
+        _tmppdf = None
+        if osp.splitext(path)[-1].lower() != '.pdf':
+            im = Image.open(path)
+            # size = im.size
+            _tmppdf = "__".join([osp.splitext(path)[0], '.pdf'])
+            im.save(_tmppdf,'PDF', resolution=100)
+            path = _tmppdf
+        reader = PdfReader(path)
+        for _, page in enumerate(reader.pages):
+            writer.add_page(page)
+        if _tmppdf:
+            os.remove(_tmppdf)
+    _write_pdf(writer, out_path)
