@@ -244,6 +244,10 @@ def _get_bib(metadata: dict) -> dict:
 def _parse_metadata(reader: PdfReader, **kwargs) -> dict:
     # get existing metadata
     metadata = dict(reader.metadata) if reader.metadata is not None else {}
+    return _collect_metadata(metadata=metadata, **kwargs)
+
+def _collect_metadata(**kwargs):
+    metadata = kwargs.get('metadata', {})
     # cleanup metadata keys
     _format_pdf_keys(kwargs)
     _remove_none_keys(kwargs)
@@ -499,7 +503,7 @@ def _get_files(path: Union[str, tuple, list, None] = None,
     if isinstance(path, str):
         assert osp.isdir(path), f'path {path} not a folder'
         path = osp.expanduser(osp.abspath(path))
-        path = [f.path for f in os.scandir(osp.abspath(path))
+        path = [f.path for f in os.scandir(path)
                 if osp.splitext(f.name)[-1].lower() in exts]
         kw = {"key": lambda x:  getattr(osp, sort_order)(x)} if isinstance(sort_order, str) else {}
         path = sorted(path, **kw)
@@ -515,16 +519,24 @@ def _get_files(path: Union[str, tuple, list, None] = None,
 
 def make_pdf(path: Union[str, tuple, list, None] = None,
              out_path: Optional[str] = None,
-             sort_order: Optional[str] = None):
-    """
+             sort_order: Optional[str] = None,
+             size: Union[tuple, list, str, bool] = False,
+             **kwargs):
+    """ Make pdf from multiple pdfs or img files, include metadata
+    # Does not:
+        preserve pdfs internal links if existing
+    
     path        None:           current path
                 str:            folder
                 list | tuple:   files/  pdfs jpgs, pngs
     out_path    None:   folder name
     sort_order  None:   if input path is not a list, alphabetical
-                str:    ctime, mtime
+                str:    getctime, getmtime
+    size        bool        True    resizes to first page
+                str         A0-A7, C4 from  pypdf.PaperSize.__dict__
+                list, tuple (with, height)
     kwargs
-        url, author, year, bibtex
+        url, author, year, bibtex, 
     """
     exts = ['.pdf', '.jpg','.jpeg', '.png']
     paths = _get_files(path, sort_order, exts)
@@ -534,20 +546,57 @@ def make_pdf(path: Union[str, tuple, list, None] = None,
 
     if out_path is None:
         out_path = f"{osp.split(paths[0])[0]}.pdf"
-        assert not osp.isfile(out_path), f"file conflict, {out_path} exists, nothing done."
+    else:
+        out_path = osp.expanduser(osp.abspath(out_path))
+    assert not osp.isfile(out_path), f"file conflict, {out_path} exists, nothing done."
+
+    if size:
+        if isinstance(size, str):
+            _sizes = [k for k in pypdf.PaperSize.__dict__ if k[0] != "_"]
+            assert size in _sizes, f"requested size {size} not in {_sizes}"
+            size = list(pypdf.PaperSize.__dict__['A4']) # pypdf is W H
+        if isinstance(size, tuple):
+            size = list(size)
+        assert isinstance(size, (list, bool)), f"invalid size spec type {type(size)}, {size}"
+
 
     writer = PdfWriter()
-    for path in paths:
+    for i, path in enumerate(paths):
         _tmppdf = None
         if osp.splitext(path)[-1].lower() != '.pdf':
             im = Image.open(path)
-            # size = im.size
             _tmppdf = "__".join([osp.splitext(path)[0], '.pdf'])
             im.save(_tmppdf,'PDF', resolution=100)
             path = _tmppdf
         reader = PdfReader(path)
         for _, page in enumerate(reader.pages):
+            page, size = _resize_pdf_page(page, size)
             writer.add_page(page)
         if _tmppdf:
             os.remove(_tmppdf)
+
+    metadata = _collect_metadata(metadata={}, **kwargs)
+    if metadata:
+        writer.add_metadata(metadata)
     _write_pdf(writer, out_path)
+
+
+def _resize_im(im, size):
+    if size:
+        _size = list(im.size)
+        if size is True:
+            size = _size
+        elif size != _size:
+            scaleby = min(size[0]/_size[0],  size[1]/_size[1])
+            im = im.resize((round(_size[0]*scaleby), round(_size[1]*scaleby)))
+    return im, size
+
+def _resize_pdf_page(page, size):
+    if size:
+        _size = page['/MediaBox'][-2:]
+        if size is True:
+            size = _size
+        elif size != _size:
+            scaleby = min(size[0]/_size[0],  size[1]/_size[1])
+            page.scale_by(scaleby)
+    return page, size
