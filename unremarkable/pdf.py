@@ -70,7 +70,6 @@ def pdf_mod(in_path: Union[str, list, tuple],
     _remove_pages(writer, custom_pages)
     metadata = _parse_metadata(reader, **kwargs)
     _delete_keys(metadata, delete_keys)
-    # add metadata field
     writer.add_metadata(metadata)
 
     # join pdfs
@@ -247,7 +246,7 @@ def _parse_metadata(reader: PdfReader, **kwargs) -> dict:
     return _collect_metadata(metadata=metadata, **kwargs)
 
 def _collect_metadata(**kwargs):
-    metadata = kwargs.get('metadata', {})
+    metadata = kwargs.pop('metadata', {})
     # cleanup metadata keys
     _format_pdf_keys(kwargs)
     _remove_none_keys(kwargs)
