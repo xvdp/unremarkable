@@ -12,6 +12,7 @@ import subprocess as sp
 import uuid
 import json
 import pypdf
+from pprint import pprint
 ##
 # config
 #
@@ -597,6 +598,46 @@ def build_file_graph(folder: Optional[str] = None, dir_type: bool = False) -> Op
     graph = {}
     build_name_graph(uidgraph, folder, graph)
     return graph
+
+def get_file_list(name: Union[str, list], graph: dict, out: Optional[dict] = None) -> dict:
+    """ inverts the file graph, returns files as keys, folders' list as value"""
+    if isinstance(name, str):
+        name = [name]
+    if out is None:
+        out = {}
+    folders = []
+    for k, v in graph.items():
+        if isinstance(v, dict):
+            folders.append((v, [k] + name))
+        elif k != 'uuid':# is always a string
+            out[k] = name
+    for f in folders:
+        get_file_list(f[1], f[0], out)
+    return out
+
+def find_file(pattern: str, i: bool = True, w: bool = False, folder: Optional[str] = None, verbose: bool = True) -> dict:
+    """ find files in remarkable backup, 
+    similar to find .   
+    """
+    out = {}
+    graph = build_file_graph(folder)
+    files = get_file_list('My files', graph)
+    if i: # case insensitive
+        pattern = pattern.lower()
+    for k, v in files.items():
+        name = k.lower() if i else k
+        if name == pattern or (not w and pattern in name)  :
+            out[k] = v
+    if verbose:
+        pprint(out)
+    else:
+        return out
+
+
+
+
+
+
 
 ##
 # miscelaneous
