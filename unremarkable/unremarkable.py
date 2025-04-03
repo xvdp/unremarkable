@@ -615,9 +615,18 @@ def get_file_list(name: Union[str, list], graph: dict, out: Optional[dict] = Non
         get_file_list(f[1], f[0], out)
     return out
 
-def find_file(pattern: str, i: bool = True, w: bool = False, folder: Optional[str] = None, verbose: bool = True) -> dict:
+def find_file(pattern: str,
+              i: bool = True,
+              w: bool = False,
+              folder: Optional[str] = None,
+              verbose: bool = True) -> dict:
     """ find files in remarkable backup, 
-    similar to find .   
+    similar to find . | grep -i [-w] pattern
+    Args
+        pattern     search pattern in file name
+        i           (bool [True]) if true case insensitive
+        w           (bool [False]) if true whole word only
+        verbose     (bool [True]) if True pprint, if False return file dict
     """
     out = {}
     graph = build_file_graph(folder)
@@ -630,6 +639,7 @@ def find_file(pattern: str, i: bool = True, w: bool = False, folder: Optional[st
             out[k] = v
     if verbose:
         pprint(out)
+        return None
     else:
         return out
 
