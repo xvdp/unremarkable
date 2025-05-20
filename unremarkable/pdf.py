@@ -599,3 +599,28 @@ def _resize_pdf_page(page, size):
             scaleby = min(size[0]/_size[0],  size[1]/_size[1])
             page.scale_by(scaleby)
     return page, size
+
+
+def reformat_bib(fname):
+    """ swap quotations for brackets
+    """
+    assert fname.lower().endswith('.bib') or fname.lower().endswith('.bibtex'), ".bib file expected, got  {fname}"
+    out = []
+
+    with open(fname, 'r', encoding='utf8') as fi:
+        lines = fi.read().split('\n')
+    for i, line in enumerate(lines):
+        if not line:
+            continue
+        key = ''
+        if "=" in line:
+            key, line = line.split("=")
+            key = "    " + key + " = "
+        line = line.strip()
+        if line[0] == '"':
+            line = '{'+ line[1:]
+        line = re.sub(r'(?<!\\)"', '}', line)
+        out.append(key+line)
+    with open(fname, 'w', encoding='utf8') as fi:
+        fi.write("\n".join(out))
+    return out

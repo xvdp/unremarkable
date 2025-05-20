@@ -27,7 +27,9 @@ setup(
         'console_scripts': [
             'pdf_to_remarkable=unremarkable.__main__:pdf_to_remarkable',    # -> upload pdf
             'pdf_bibtex=unremarkable.__main__:pdf_bibtex',                  # add .bib to .pdf
+            'pdfbib=unremarkable.__main__:pdf_bibtex',                      # > better alias
             'pdf_metadata=unremarkable.__main__:pdf_metadata',              # add url, author.
+            'pdfmeta=unremarkable.__main__:pdf_metadata',                   # > better alias
             'remarkable_backup=unremarkable.__main__:remarkable_backup',    # <- backup to local
             'remarkable_ls=unremarkable.__main__:remarkable_ls', # . list files on backup
             'remarkable_export_annotated=unremarkable.__main__:remarkable_export_annotated',

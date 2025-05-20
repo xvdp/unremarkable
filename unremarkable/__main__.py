@@ -4,6 +4,7 @@ console entry points for unremarkable handling of reMarkable files
 """
 from typing import Union, Optional, Any
 import argparse
+import glob
 import os
 import os.path as osp
 import pprint
@@ -95,16 +96,38 @@ def _parse_pages(pages: Optional[list]) -> Union[None, int, list, slice]:
             pages = _asint(pages[0], _msg)
     return pages
 
+def _get_bib_file(pdfname: str, bibname: Optional[str] = None) -> Optional[str]:
+    """resolves bib name, renames to private .bibname.bib"""
+    # print(f"getting bib for {pdfname}")
+    if bibname is None or not osp.isfile(bibname):
+        bibname = f'{osp.splitext(pdfname)[0]}.bib'
+        # print(f"resolving bib name to {bibname}: exists? {osp.isfile(bibname)}")
+    if bibname[0] != ".":
+        __bib = ".".join([osp.dirname(bibname), osp.basename(bibname)])
+        if osp.isfile(bibname):
+            # print(f"renaming  bib to {__bib}")
+            os.rename(bibname, __bib)
+        bibname = __bib
+    # print(f"is file {osp.isfile(bibname)}")
+    return bibname if osp.isfile(bibname) else None
+
+def _resolve_pdf(pdfname: str) -> str:
+    pdf, ext = osp.splitext(pdfname)
+    if not osp.isfile(pdfname) and ext.lower() != '.pdf':
+        ext = '.pdf'
+    return f'{pdf}{ext}'
+
 
 def pdf_bibtex():
-    """ entry point to add bibtex to pdf
+    """ add bibtex to metadata, required <file>.pdf and <file>.bib
     Args
-        pdf     (str) valid pdf file
+        pdf     (str) .pdf filename
     optional
-        bib     (str) valid bib file - if None looks for pdf.replace('.pdf', '.bib')
-        --name  (str) <filename>.pdf, default overwrites
-        --pages (int, list, str) str: 1- slice(1,None)
-        --keys  (str, list) # delete keys
+        bib     (str) .bib: if ommited will use same name as pdf  <pdf>.replace('.pdf', '.bib')
+        -k --keys       (str | list) metadata keys to be deleted
+        -n --name       (str) rename pdf: default overwrites
+        -p --pages      (int | list | str) keep pages e.g. -a 5 7 11 | -a -4 | -a 13-17 
+        -u --url        (str)
         renames  filename.bib to .filename.bib
     """
     parser = argparse.ArgumentParser(description='Add bib to pdf')
@@ -116,19 +139,20 @@ def pdf_bibtex():
     parser.add_argument('-k', '--keys', nargs='+', default=None, help="delete keys")
     parser.add_argument('-u', '--url', type=str, help='add url', default=None)
     args = parser.parse_args()
-    _pdf, ext = osp.splitext(args.pdf)
-    if not osp.isfile(args.pdf) and ext.lower() != '.pdf':
-        ext = '.pdf'
-    pdf = f'{_pdf}{ext}'
+    # _pdf, ext = osp.splitext(args.pdf)
+    # if not osp.isfile(args.pdf) and ext.lower() != '.pdf':
+    #     ext = '.pdf'
+    pdf = _resolve_pdf(args.pdf)
     assert osp.isfile(pdf), f"pdf file not found {pdf}"
 
-    bib = args.bib
-    if bib is None or not osp.isfile(bib):
-        _bib = f'{_pdf}.bib'
-        __bib = ".".join([osp.dirname(_bib), osp.basename(_bib)])
-        if osp.isfile(_bib):
-            os.rename(_bib, __bib)
-        bib = __bib if osp.isfile(__bib) else None
+    # bib = args.bib
+    # if bib is None or not osp.isfile(bib):
+    #     _bib = f'{_pdf}.bib'
+    #     __bib = ".".join([osp.dirname(_bib), osp.basename(_bib)])
+    #     if osp.isfile(_bib):
+    #         os.rename(_bib, __bib)
+    #     bib = __bib if osp.isfile(__bib) else None
+    bib = _get_bib_file(pdf, args.bib)
     assert osp.isfile(bib), f"bib file not found {args.bib}, use pdf_metadata for custom keys"
 
     pages = _parse_pages(args.pages)
@@ -137,39 +161,41 @@ def pdf_bibtex():
 
 
 def pdf_metadata():
-    """ add metadata to pdf : similar to pdf_bibtex without bibtex, useful shortcut for adding url
+    """ add metadata to pdf
     Args
         pdf     (str) valid pdf file
     optional
-        --name      (str) <filename>.pdf, default overwrites
-        --author    (str)
-        --year      (int)
-        --title     (str) 
-        --url       (str)
-        --pages (int, list, str) str: 1- slice(1,None)
-        --keys  (str, list) # delete keys
-        renames  filename.bib to .filename.bib
+        bib     (str) .bib: if ommited will use same name as pdf  <pdf>.replace('.pdf', '.bib')
+        -a --author     (str | list)    e.g -a "Al Keinstein" "Neel Boor"
+        -k --keys       (str | list) metadata keys to be deleted
+        -n --name       (str) rename pdf: default overwrites
+        -p --pages      (int | list | str) keep pages e.g. -a 5 7 11 | -a -4 | -a 13-17 
+        -t --title      (str)
+        -u --url        (str)
+        -y --year       (int)
     """
     parser = argparse.ArgumentParser(description='Add metadata pdf')
     parser.add_argument('pdf', type=str, help='valid .pdf file')
-    parser.add_argument('-n', '--name', type=str, help='create new file with name -n', default=None)
+    parser.add_argument('bib', type=str, nargs='?', help='valid .bib file', default=None)
     parser.add_argument('-a', '--author', type=str, nargs='+', help='add authtors', default=None)
-    parser.add_argument('-y', '--year', type=int, help='add year', default=None)
+    parser.add_argument('-b')
+    parser.add_argument('-k', '--keys', nargs='+', default=None, help="delete keys")
+    parser.add_argument('-n', '--name', type=str, help='create new file with name -n', default=None)
+    parser.add_argument('-p', '--pages', nargs='+', default=None,
+                        help='page: eg. 2, pages: eg. 1 2 3 or pagerange: eg. 1- or 1-4')
     parser.add_argument('-t', '--title', type=str, help='add title', default=None)
     parser.add_argument('-u', '--url', type=str, help='add url', default=None)
-    parser.add_argument('-p', '--pages', nargs='+', default=None,
-        help='page: eg. 2, pages: eg. 1 2 3 or pagerange: eg. 1- or 1-4')
-    parser.add_argument('-k', '--keys', nargs='+', default=None, help="delete keys")
+    parser.add_argument('-y', '--year', type=int, help='add year', default=None)
+
     args = parser.parse_args()
+    pdf = _resolve_pdf(args.pdf)
+    bib = _get_bib_file(pdf, args.bib)
     pages = _parse_pages(args.pages)
     _pages = pages or 0
     kwargs = {'url': args.url} if args.url else {}
-    if any((_pages, args.keys, args.title, args.title, args.author, args.year, kwargs)):
-        pdf_mod(args.pdf, args.name, author=args.author, title=args.title, year=args.year,
-                        custom_pages=pages, delete_keys=args.keys, **kwargs)
-
-        # add_pdf_metadata(args.pdf, author=args.author, title=args.title, year=args.year,
-        #                 custom_pages=args.pages, delete_keys=args.keys, **kwargs)
+    if any((_pages, args.keys, args.title, args.pages, args.author, args.year, bib, kwargs)):
+        pdf_mod(pdf, args.name, bibtex=bib, author=args.author, title=args.title,
+                year=args.year, custom_pages=pages, delete_keys=args.keys, **kwargs)
 
 def not_in_remarkable():
     """ outputs remote files in folder
@@ -267,18 +293,32 @@ def remarkable_help():
     _help = f"""{_Y}https://github.com/xvdp/unremarkable{_A}  access reMarkable without app.
     reMarkable {_col}{connected} connected {_A} through USB IP {_col}{ip}{_A}
     backup folder {_col}{isstored}found in ~/.xochitl {_G}{xochitl} {_A}
-{_Y}Console{_A}
+{_Y}!/bin/bash commands{_A}
     $ {_B}pdf_to_remarkable{_A} <pdf> [visible folder name] [-n, --name <file visible name>] [-r, --no_restart]
         {_G}# upload one pdf of all pdfs in a local folder to reMarkable{_A}
         Args        pdf     (str) valid pdf file or "*"
         Optional    parent  (str ['']) visible folder name in remarkable
         kwargs      --name -n (str [None]) visible name | default pdfbasename.replace("_"," ") 
                     --no_restart -r   NO ARGS  | default restart xochitl to refresh UI
-    $ {_B}pdf_bibtex  <pdf> <bib> [-p, --pages ]
-        {_G}# add bibtex to pdf{_A} 
+    $ {_B}pdfbib <pdf> <bib> [-k delete_keys-n rename -p keep_pages -u url]
+        {_G}# add bibtex to pdf{_A} bibtex required  
         Args    pdf     (str) pdf file
-                bib     (str) text bibtex file
-        kwargs  --pages -p  (list, int, range as str) 2 | 1 2 3 | 1- | 1-4' 
+                bib     (str) text bibtex file [if ommited assumes same name as pdf]
+        kwargs  -n --name  rename pdf
+                -p --pages  (list, int, range as str) 2 | 1 2 3 | 1- | 1-4' 
+                -u --url        (str)
+                -k --keys       (str | list) metadata keys to be deleted
+    $ {_B}pdfmeta <pdf> [<bib> -a author list -k delete_keys -n rename -p keep_pages -t title -u url -y year]
+        {_G}# add metadata to pdf{_A} bibtex optional
+        Args        pdf     (str) pdf file
+                    bib     (str) text bibtex file [if ommited assumes same name as pdf]
+        -a --author     (str | list)    e.g -a "Al Keinstein" "Neel Boor"
+        -k --keys       (str | list) metadata keys to be deleted
+        -n --name       (str) rename pdf: default overwrites
+        -p --pages      (int | list | str) keep pages e.g. -a 5 7 11 | -a -4 | -a 13-17 
+        -t --title      (str)
+        -u --url        (str)
+        -y --year       (int)
     $ {_B}remarkable_restart  {_G}# restart xochitl service to view upload changes{_A}   
     $ {_B}remarkable_backup {_A}[folder] # folder in (existing_dir, ? )
         {_G}# back up reMarkable local,  folder name stored to ~/.xochitl file{_A}
@@ -295,16 +335,18 @@ def remarkable_help():
                     folder      local folder | default current
                     name        output name | default visibleName
                     xochitl     backup folder | default cat ~/.xochitl
-{_Y}Python{_A}
-    {_M}>>> {_B}from unremarkable import remarkable_name, add_authors, add_pdf_metadata, get_annotated{_A}
+{_Y}python{_A}
+    {_M}>>> {_B}from unremarkable import remarkable_name, get_annotated{_A}
     {_M}>>> {_B}remarkable_name({_A}<partial visbilbe name or uuid>{_B}){_A} -> tuple(uuid, visible name)
         {_G}# return (uuid, visible name) from uuid or sufficiently unique partial name, from reMarkable BACKUP e.g.{_A}
-    {_M}>>> {_B}add_authors({_A}filename, authors, title=None, year=None, override=False, upload=True, restart=True{_B}){_A} 
-        {_G}# add author names to reMarkable BACKUP .content, then upload to tablet, tablet file must be closed{_A}
-    {_M}>>> {_B}add_pdf_metadata({_A}filename, author=None, title=None, year=None, subject=None, delete_keys=(), suffix=False, custom_pages=None, bibtex=None, **kwargs{_B}){_A} 
-        {_G}# add metadata keys (author, title, year, subject, **kwargs), delete keys, add suffix, export custom page tuple/ range to LOCAL PDF{_A}
-        {_G}# arg bibtex can pass a .bib file name or a string containing bibtex formated info{_A}
     {_M}>>> {_B}files = get_annotated(){_A} -> dict('annotated':[], 'old':[])
-        {_G}# files with annotations on reMarkable BACKUP,  'old' are files without zoomMode - are they v5? WIP.{_A}
-    >>> pprint.pprint(files['annotated'])"""
+    >>> pprint.pprint(files['annotated'])
+
+    """
     print (_help)
+
+# {_M}>>> {_B}add_authors({_A}filename, authors, title=None, year=None, override=False, upload=True, restart=True{_B}){_A}
+#     {_G}# add author names to reMarkable BACKUP .content, then upload to tablet, tablet file must be closed{_A}
+# {_M}>>> {_B}add_pdf_metadata({_A}filename, author=None, title=None, year=None, subject=None, delete_keys=(), suffix=False, custom_pages=None, bibtex=None, **kwargs{_B}){_A} 
+#     {_G}# add metadata keys (author, title, year, subject, **kwargs), delete keys, add suffix, export custom page tuple/ range to LOCAL PDF{_A}
+#     {_G}# arg bibtex can pass a .bib file name or a string containing bibtex formated info{_A}
