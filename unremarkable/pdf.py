@@ -1,16 +1,27 @@
 """@xvdp
 pdf utilities
 
-# entry point to __main__.pdf_bibtex __main__.pdf_metadata
->> pdf_mod() # add metadata, bibtex, url, author ...modify page range
-    TODO: fix. explicit metadata should override bibtex custom keys when both
-    bibtex and metdadata custom keys are passed
+# .pdf utility functions:
+    pdf_mod() # add metadata, bibtex, url, author ...modify page range
+
+# entry point to 
+    __main__.pdf_bibtex / pdfbib
+    __main__.pdf_metadata / pdfmeta 
+    TODO replace all by pdfmeta -should
 
 # non metadata & links preserving
->> split_pdf() # create one pdf per page
->> rotate()  # rotate all pages in a pdf
->> doublepage() # convert to 2 page view
->> convert_page_size() # scale sizes
+    
+    split_pdf()     # create one pdf per page
+    rotate()        # rotate all pages in a pdf
+    doublepage()    # joins pages side to side for 2 page view
+    convert_page_size() # scale sizes
+
+make_pdf()  Make pdf from multiple pdfs or img files, include metadata
+    # Does not:
+        preserve pdfs internal links if existing
+.bib utilities
+    reformat_bib() converts bib using "" to {}
+    
 """
 from typing import Optional, Union, Any, Tuple
 import os
@@ -48,6 +59,9 @@ def pdf_mod(in_path: Union[str, list, tuple],
         subject
         bibtex      if bibtex: author, year, title are overwritten
         require     required keys for bibtex to be imported, e.g. 'title'
+        size        tuple or str:
+                        "common":   resize to most common page size 
+                        "mean":     resize to mean page 
     """
     # validate io paths
     join_paths = []
@@ -72,17 +86,49 @@ def pdf_mod(in_path: Union[str, list, tuple],
     _delete_keys(metadata, delete_keys)
     writer.add_metadata(metadata)
 
+
     # join pdfs
     for path in join_paths:
         reader = PdfReader(path)
         for page in reader.pages:
             writer.add_page(page)
 
+    # resize pages
+    resize = kwargs.get("size", None)
+    newsize, vary = _get_resize_params(writer, resize)
+    _resize_pdf_pages(writer, newsize, vary)
+
      # not sure if this does anything, it does not clean ophaned links.
     writer.compress_identical_objects()
 
     with open(out_path, 'wb') as output_file:
         writer.write(output_file)
+
+def _resize_pdf_pages(writer, size, checkall):
+    """ """
+    if size is not None:
+        for i, page in enumerate(writer.pages):
+            _size = _get_page_size(page)
+            if _size[0] == size[0] and _size[1] == size[1]:
+                if not checkall:
+                    continue
+            else:
+                page.scale(size[0]/_size[0], size[1]/_size[1])
+
+
+def _get_resize_params(reader, size) -> tuple:
+    sizes = get_page_sizes(reader)
+    vary = "mean" in sizes
+    if isinstance(size, str):
+        if size in ("common", "mean"):
+            size = sizes["common"] if not vary else sizes[size]
+        elif size[0] != "__" and size in pypdf.PaperSize.__dict__:
+            size = tuple(pypdf.PaperSize.__dict__[size])
+
+    assert size is None or isinstance(size, (tuple, np.ndarray, list)) and len(size)==2, \
+        f"size arg fails, expected, tuple(number, number), str in ('common', 'mean'), got {size}"
+    return size, vary
+
 
 def _clone(path: str) -> Tuple[PdfReader, PdfWriter]:
     reader = PdfReader(path)
@@ -253,7 +299,11 @@ def _collect_metadata(**kwargs):
     # read bibtex
     _import_bib(kwargs)
     metadata.update(**kwargs)
+    if "/Author" in metadata:
+        if isinstance(metadata["/Author"], list):
+            metadata["/Author"] = ", ".join(metadata["/Author"])
     return metadata
+
 
 def _delete_keys(metadata: dict, keys: Union[str, list, tuple, bool, None] = None) -> None:
     """removes unwanted metadata keys"""
@@ -441,6 +491,49 @@ def rotate(pdf: str,
     with open(outname, 'wb') as output:
         writer.write(output)
 
+def get_page_sizes(pdf: Union[PdfReader, str], verbose: bool = False) -> dict:
+    """ get statistics for page sizes of unevenly sized pages
+        pdf: filename or reader
+        verbose: pretty print stats
+        >>> get_page_sizes("mypdffile.pdf", verbose=Treu)
+    """
+    if isinstance(pdf, str):
+        pdf = PdfReader(pdf)
+    wh = np.stack([np.array(pdf.pages[i].mediabox[2:]) for i in range(len(pdf.pages))])
+    page_sizes = _page_size_stats(wh)
+    if verbose:
+        pprint(page_sizes)
+    return page_sizes
+
+def _page_size_stats(wh) -> dict:
+    """ if all pages are the same returns 
+    """
+    out = dict(common=None, counts=0)
+
+    if np.all(wh == wh[0]):
+        out['common'] = wh[0]
+        out['counts'] = {tuple(wh[0]): len(wh)}
+    else:
+        pairs, counts = np.unique(wh, axis=0, return_counts=True)
+        out['common'] = pairs[np.argmax(counts)]
+        out['mean'] = np.mean(wh, axis=0)
+        out['counts'] = {tuple(pair): count for pair, count in zip(pairs, counts)}
+        out['common_perc'] = counts[np.argmax(counts)]/len(wh)
+
+        if np.max(counts) / len(wh) <= 0.5: # mean excluding outliers using zscore
+            z_treshold = 1.5
+            excluded = 0
+            while excluded < 0.5: # at least 50%
+                std = np.std(wh, axis=0)
+                mask = np.abs(wh - np.mean(wh, axis=0))/std < z_treshold
+                mask = mask[:, 0] & mask[:, 1]
+                excluded = np.sum(mask) / len(mask)
+                z_treshold += 0.5
+            out['mean'] = np.mean(wh[mask], axis=0)
+            std = np.std(wh[mask], axis=0)
+            out['common_std'] = np.abs(out['common']  - out['mean'])/std
+            out['common_diff'] = np.abs(out['common']  - out['mean'])
+    return out
 
 def _getmeanpage(reader: PdfReader) -> Tuple[FloatType, FloatType]:
     w, h = np.stack([np.array(reader.pages[i].mediabox[2:]) for i in range(len(reader.pages))]).T
@@ -569,7 +662,7 @@ def make_pdf(path: Union[str, tuple, list, None] = None,
             path = _tmppdf
         reader = PdfReader(path)
         for _, page in enumerate(reader.pages):
-            page, size = _resize_pdf_page(page, size)
+            page = _resize_pdf_page(page, size)
             writer.add_page(page)
         if _tmppdf:
             os.remove(_tmppdf)
@@ -590,21 +683,25 @@ def _resize_im(im, size):
             im = im.resize((round(_size[0]*scaleby), round(_size[1]*scaleby)))
     return im, size
 
+def _get_page_size(page):
+    return page['/MediaBox'][-2:]
+
 def _resize_pdf_page(page, size):
     if size:
         _size = page['/MediaBox'][-2:]
         if size is True:
             size = _size
-        elif size != _size:
+        elif size[0] != _size[0] and size[1] != _size[1]:
             scaleby = min(size[0]/_size[0],  size[1]/_size[1])
             page.scale_by(scaleby)
-    return page, size
+    return page
 
 
 def reformat_bib(fname):
-    """ swap quotations for brackets
+    """ swap quotations for brackets in .bib
     """
-    assert fname.lower().endswith('.bib') or fname.lower().endswith('.bibtex'), ".bib file expected, got  {fname}"
+    assert fname.lower().endswith('.bib') or fname.lower().endswith('.bibtex'),\
+          ".bib file expected, got  {fname}"
     out = []
 
     with open(fname, 'r', encoding='utf8') as fi:

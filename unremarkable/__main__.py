@@ -12,7 +12,7 @@ import pprint
 from .unremarkable import backup_tablet, upload_pdf, build_file_graph, \
     _is_host_reachable, _get_xochitl, restart_xochitl, get_remote_files
 from .annotations import export_annotated_pdf
-from .pdf import pdf_mod
+from .pdf import pdf_mod, get_page_sizes
 from . import rmscene
 
 _A="\033[0m"
@@ -81,6 +81,15 @@ def _asslice(pages: str, msg: str = "") -> Optional[slice]:
         out = slice(*out)
     return out
 
+def _parse_size(size: Optional[list]) -> Union[None, list, str]:
+    if size is not None:
+        _msg = f"\n\t-s arg expected <(int int)> or <str> in ('common', 'mean', A4)\n\tgot {size}"
+        assert len(size) in (1,2), _msg
+        if len(size) == 1:
+            size = size[0]
+        else:
+           size = [_asint(p, _msg) for p in size]
+    return size
 
 def _parse_pages(pages: Optional[list]) -> Union[None, int, list, slice]:
     """ fixed a couple rror cases, TODO move out of __main__
@@ -139,19 +148,11 @@ def pdf_bibtex():
     parser.add_argument('-k', '--keys', nargs='+', default=None, help="delete keys")
     parser.add_argument('-u', '--url', type=str, help='add url', default=None)
     args = parser.parse_args()
-    # _pdf, ext = osp.splitext(args.pdf)
-    # if not osp.isfile(args.pdf) and ext.lower() != '.pdf':
-    #     ext = '.pdf'
+
     pdf = _resolve_pdf(args.pdf)
     assert osp.isfile(pdf), f"pdf file not found {pdf}"
 
-    # bib = args.bib
-    # if bib is None or not osp.isfile(bib):
-    #     _bib = f'{_pdf}.bib'
-    #     __bib = ".".join([osp.dirname(_bib), osp.basename(_bib)])
-    #     if osp.isfile(_bib):
-    #         os.rename(_bib, __bib)
-    #     bib = __bib if osp.isfile(__bib) else None
+
     bib = _get_bib_file(pdf, args.bib)
     assert osp.isfile(bib), f"bib file not found {args.bib}, use pdf_metadata for custom keys"
 
@@ -159,6 +160,17 @@ def pdf_bibtex():
     kwargs = {'url': args.url} if args.url else {}
     pdf_mod(pdf, args.name, bibtex=bib, delete_keys=args.keys, custom_pages=pages, **kwargs)
 
+
+def pdf_page_sizes():
+    """
+    Args
+        pdf     (str) valid pdf file
+    """
+    parser = argparse.ArgumentParser(description='Add metadata pdf')
+    parser.add_argument('pdf', type=str, help='valid .pdf file')
+    args = parser.parse_args()
+    pdf = _resolve_pdf(args.pdf)
+    get_page_sizes(pdf, verbose=True)
 
 def pdf_metadata():
     """ add metadata to pdf
@@ -169,10 +181,11 @@ def pdf_metadata():
         -a --author     (str | list)    e.g -a "Al Keinstein" "Neel Boor"
         -k --keys       (str | list) metadata keys to be deleted
         -n --name       (str) rename pdf: default overwrites
-        -p --pages      (int | list | str) keep pages e.g. -a 5 7 11 | -a -4 | -a 13-17 
+        -p --pages      (int | list | str) keep pages e.g. -p 5 7 11 | -p -4 | -p 13-17 
         -t --title      (str)
         -u --url        (str)
         -y --year       (int)
+        -s --size       (list | str) resize pages e.g. -s 443 678 | -s common | -s mean | -s A4 
     """
     parser = argparse.ArgumentParser(description='Add metadata pdf')
     parser.add_argument('pdf', type=str, help='valid .pdf file')
@@ -186,16 +199,21 @@ def pdf_metadata():
     parser.add_argument('-t', '--title', type=str, help='add title', default=None)
     parser.add_argument('-u', '--url', type=str, help='add url', default=None)
     parser.add_argument('-y', '--year', type=int, help='add year', default=None)
+    parser.add_argument('-s', '--size', nargs='+', default=None,
+                        help='resize pages: eg. 412 612 or A4 or common or mean')
 
     args = parser.parse_args()
     pdf = _resolve_pdf(args.pdf)
     bib = _get_bib_file(pdf, args.bib)
     pages = _parse_pages(args.pages)
+    size = _parse_size(args.size)
     _pages = pages or 0
     kwargs = {'url': args.url} if args.url else {}
-    if any((_pages, args.keys, args.title, args.pages, args.author, args.year, bib, kwargs)):
+
+    if any((_pages, args.keys, args.title, args.pages, args.author, args.year, bib, args.size,
+            kwargs)):
         pdf_mod(pdf, args.name, bibtex=bib, author=args.author, title=args.title,
-                year=args.year, custom_pages=pages, delete_keys=args.keys, **kwargs)
+                year=args.year, custom_pages=pages, delete_keys=args.keys, size=size, **kwargs)
 
 def not_in_remarkable():
     """ outputs remote files in folder
@@ -319,6 +337,8 @@ def remarkable_help():
         -t --title      (str)
         -u --url        (str)
         -y --year       (int)
+        -s --size       (str | list) resize pages to -s int int | -s A4 | -s mean | -s common
+    $ {_B}pdfsizes <pdf> {_G}# print page sizes of pdf{_A}#
     $ {_B}remarkable_restart  {_G}# restart xochitl service to view upload changes{_A}   
     $ {_B}remarkable_backup {_A}[folder] # folder in (existing_dir, ? )
         {_G}# back up reMarkable local,  folder name stored to ~/.xochitl file{_A}
