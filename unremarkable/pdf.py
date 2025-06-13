@@ -98,7 +98,6 @@ def pdf_mod(in_path: Union[str, list, tuple],
     newsize, vary = _get_resize_params(writer, resize)
     _resize_pdf_pages(writer, newsize, vary)
 
-     # not sure if this does anything, it does not clean ophaned links.
     writer.compress_identical_objects()
 
     with open(out_path, 'wb') as output_file:
@@ -107,7 +106,7 @@ def pdf_mod(in_path: Union[str, list, tuple],
 def _resize_pdf_pages(writer, size, checkall):
     """ """
     if size is not None:
-        for i, page in enumerate(writer.pages):
+        for _, page in enumerate(writer.pages):
             _size = _get_page_size(page)
             if _size[0] == size[0] and _size[1] == size[1]:
                 if not checkall:
@@ -117,16 +116,17 @@ def _resize_pdf_pages(writer, size, checkall):
 
 
 def _get_resize_params(reader, size) -> tuple:
+    _presets =  [k for k in pypdf.PaperSize.__dict__ if k[0] != "_"]
     sizes = get_page_sizes(reader)
     vary = "mean" in sizes
     if isinstance(size, str):
         if size in ("common", "mean"):
-            size = sizes["common"] if not vary else sizes[size]
-        elif size[0] != "__" and size in pypdf.PaperSize.__dict__:
+            size = sizes["size"] if not vary else sizes[size]
+        elif size[0] != "__" and size in _presets:
             size = tuple(pypdf.PaperSize.__dict__[size])
 
     assert size is None or isinstance(size, (tuple, np.ndarray, list)) and len(size)==2, \
-        f"size arg fails, expected, tuple(number, number), str in ('common', 'mean'), got {size}"
+        f"size: expects, tuple (number, number) | str in {['size', 'common']+_presets}, got {size}"
     return size, vary
 
 
@@ -235,7 +235,11 @@ def _format_bib(bib: str):
     bib = re.sub(_quotes, _bib_brackets, bib)
     return re.sub(_upper, _bib_lowercase, bib)
 
+
 def format_bib(bib: str) -> str:
+    '''replace "<value>", with, {<value>}, in
+        .bib files or bibtext str
+    '''
     if osp.isfile(bib):
         bibname = bib
         with open(bib, 'r', encoding='utf8') as fi:
@@ -245,6 +249,7 @@ def format_bib(bib: str) -> str:
     else:
         bib = _format_bib(bib)
     return bib
+
 
 def _import_bib(metadata: dict,
                 bib_format: str = 'bibtex',
@@ -278,6 +283,7 @@ def _import_bib(metadata: dict,
             if key in bibdic:
                 metadata[_format_pdf_key(key)] = bibdic[key]
 
+
 def _get_bib(metadata: dict) -> dict:
     bib = None
     _keys = ["/Bib", "/Bibtex"]
@@ -286,10 +292,12 @@ def _get_bib(metadata: dict) -> dict:
         bib = metadata.pop(bibkey[0])
     return bib
 
+
 def _parse_metadata(reader: PdfReader, **kwargs) -> dict:
     # get existing metadata
     metadata = dict(reader.metadata) if reader.metadata is not None else {}
     return _collect_metadata(metadata=metadata, **kwargs)
+
 
 def _collect_metadata(**kwargs):
     metadata = kwargs.pop('metadata', {})
@@ -318,10 +326,12 @@ def _delete_keys(metadata: dict, keys: Union[str, list, tuple, bool, None] = Non
         if key in metadata:
             del metadata[key]
 
+
 def _format_pdf_key(key: str) -> str:
     if key[0] != '/':
         key =  '/' + key[0].upper()+key[1:]
     return key
+
 
 def _format_pdf_keys(metadata: dict) -> None:
     """pdf metadata expects keys as /Capitalfirstinitial """
@@ -332,11 +342,13 @@ def _format_pdf_keys(metadata: dict) -> None:
         if k != key:
             metadata[key] = metadata.pop(k)
 
+
 def _remove_none_keys(metadata: dict) -> None:
     keys = list(metadata.keys())
     for key in keys:
         if metadata[key] is None:
             metadata.pop(key)
+
 
 def _ext_assert(path: str, ext: str) -> None:
     ext = ext.lower()
@@ -506,19 +518,30 @@ def get_page_sizes(pdf: Union[PdfReader, str], verbose: bool = False) -> dict:
     return page_sizes
 
 def _page_size_stats(wh) -> dict:
-    """ if all pages are the same returns 
+    """ returns {
+            'size'      : tuple, most common page size
+            'page_count':   -> int, if all pages are the same
+        # if more than one page size found
+            'page_count':   -> {tuple: int, ...}
+            'size_perc':    -> % of most common size
+            # excluding outliers
+            'mean':         -> mean of page sizes, tuple
+            'size_diff':    -> abs(size - mean), tuple
+            'size_std':     -> abs(size - mean) / sizes std, tuple 
+    }
     """
-    out = dict(common=None, counts=0)
-
-    if np.all(wh == wh[0]):
-        out['common'] = wh[0]
-        out['counts'] = {tuple(wh[0]): len(wh)}
+    out = {}
+    # if all pages are the same
+    if np.all(wh == wh[0]): 
+        out['size'] = wh[0]
+        out['page_count'] = len(wh)
     else:
         pairs, counts = np.unique(wh, axis=0, return_counts=True)
-        out['common'] = pairs[np.argmax(counts)]
+        out['size'] = pairs[np.argmax(counts)]
         out['mean'] = np.mean(wh, axis=0)
-        out['counts'] = {tuple(pair): count for pair, count in zip(pairs, counts)}
-        out['common_perc'] = counts[np.argmax(counts)]/len(wh)
+        out['page_count']  = {tuple(pair): count for pair, count in zip(pairs, counts)}
+        out['size_perc'] = 100 * counts[np.argmax(counts)]/len(wh)
+        std = np.std(wh, axis=0)
 
         if np.max(counts) / len(wh) <= 0.5: # mean excluding outliers using zscore
             z_treshold = 1.5
@@ -529,10 +552,11 @@ def _page_size_stats(wh) -> dict:
                 mask = mask[:, 0] & mask[:, 1]
                 excluded = np.sum(mask) / len(mask)
                 z_treshold += 0.5
-            out['mean'] = np.mean(wh[mask], axis=0)
-            std = np.std(wh[mask], axis=0)
-            out['common_std'] = np.abs(out['common']  - out['mean'])/std
-            out['common_diff'] = np.abs(out['common']  - out['mean'])
+                out['mean'] = np.mean(wh[mask], axis=0)
+                std = np.std(wh[mask], axis=0)
+        out['size_diff'] = np.abs(out['size']  - out['mean'])
+        out['size_std'] = out['size_diff']/std
+
     return out
 
 def _getmeanpage(reader: PdfReader) -> Tuple[FloatType, FloatType]:

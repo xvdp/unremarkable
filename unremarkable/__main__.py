@@ -4,7 +4,6 @@ console entry points for unremarkable handling of reMarkable files
 """
 from typing import Union, Optional, Any
 import argparse
-import glob
 import os
 import os.path as osp
 import pprint
@@ -83,12 +82,14 @@ def _asslice(pages: str, msg: str = "") -> Optional[slice]:
 
 def _parse_size(size: Optional[list]) -> Union[None, list, str]:
     if size is not None:
-        _msg = f"\n\t-s arg expected <(int int)> or <str> in ('common', 'mean', A4)\n\tgot {size}"
-        assert len(size) in (1,2), _msg
+        _sizes = ['common', 'mean', 'A0', 'A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'C4']
+        _msg = f"\n\t-s arg expected <int int> or <str> in {_sizes}\n\tgot {size}"
+        assert len(size) in (1, 2), _msg
         if len(size) == 1:
             size = size[0]
+            assert size in _sizes, _msg
         else:
-           size = [_asint(p, _msg) for p in size]
+            size = [_asint(p, _msg) for p in size]
     return size
 
 def _parse_pages(pages: Optional[list]) -> Union[None, int, list, slice]:
@@ -200,7 +201,8 @@ def pdf_metadata():
     parser.add_argument('-u', '--url', type=str, help='add url', default=None)
     parser.add_argument('-y', '--year', type=int, help='add year', default=None)
     parser.add_argument('-s', '--size', nargs='+', default=None,
-                        help='resize pages: eg. 412 612 or A4 or common or mean')
+                        help='resize pages to tuple | presets | most common size | mean size \
+                            eg. 412 612 | A4 | common | mean')
 
     args = parser.parse_args()
     pdf = _resolve_pdf(args.pdf)
@@ -318,18 +320,11 @@ def remarkable_help():
         Optional    parent  (str ['']) visible folder name in remarkable
         kwargs      --name -n (str [None]) visible name | default pdfbasename.replace("_"," ") 
                     --no_restart -r   NO ARGS  | default restart xochitl to refresh UI
-    $ {_B}pdfbib <pdf> <bib> [-k delete_keys-n rename -p keep_pages -u url]
-        {_G}# add bibtex to pdf{_A} bibtex required  
-        Args    pdf     (str) pdf file
-                bib     (str) text bibtex file [if ommited assumes same name as pdf]
-        kwargs  -n --name  rename pdf
-                -p --pages  (list, int, range as str) 2 | 1 2 3 | 1- | 1-4' 
-                -u --url        (str)
-                -k --keys       (str | list) metadata keys to be deleted
     $ {_B}pdfmeta <pdf> [<bib> -a author list -k delete_keys -n rename -p keep_pages -t title -u url -y year]
         {_G}# add metadata to pdf{_A} bibtex optional
         Args        pdf     (str) pdf file
-                    bib     (str) text bibtex file [if ommited assumes same name as pdf]
+                    bib     (str) bibtex file, if omitted and .bib with same root name as pdf, adds to metadata
+                        i assumes same name as pdf]
         -a --author     (str | list)    e.g -a "Al Keinstein" "Neel Boor"
         -k --keys       (str | list) metadata keys to be deleted
         -n --name       (str) rename pdf: default overwrites
