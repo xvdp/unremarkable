@@ -310,6 +310,9 @@ def _collect_metadata(**kwargs):
     if "/Author" in metadata:
         if isinstance(metadata["/Author"], list):
             metadata["/Author"] = ", ".join(metadata["/Author"])
+    for k, v in metadata.items():
+        if (k in "/Title" or k in "/Author" )and ("}" in v or "{" in v):
+            metadata[k] = v.replace("}", "").replace("{", "")
     return metadata
 
 
