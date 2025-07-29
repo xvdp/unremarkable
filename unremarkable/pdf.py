@@ -95,8 +95,9 @@ def pdf_mod(in_path: Union[str, list, tuple],
 
     # resize pages
     resize = kwargs.get("size", None)
-    newsize, vary = _get_resize_params(writer, resize)
-    _resize_pdf_pages(writer, newsize, vary)
+    if resize is not None:
+        newsize, vary = _get_resize_params(writer, resize)
+        _resize_pdf_pages(writer, newsize, vary)
 
     writer.compress_identical_objects()
 
@@ -120,7 +121,9 @@ def _get_resize_params(reader, size) -> tuple:
     sizes = get_page_sizes(reader)
     vary = "mean" in sizes
     if isinstance(size, str):
-        if size in ("common", "mean"):
+        if size == "common":
+            size = sizes["size"]
+        elif size == "mean":
             size = sizes["size"] if not vary else sizes[size]
         elif size[0] != "__" and size in _presets:
             size = tuple(pypdf.PaperSize.__dict__[size])
@@ -530,12 +533,11 @@ def _page_size_stats(wh) -> dict:
             # excluding outliers
             'mean':         -> mean of page sizes, tuple
             'size_diff':    -> abs(size - mean), tuple
-            'size_std':     -> abs(size - mean) / sizes std, tuple 
     }
     """
     out = {}
     # if all pages are the same
-    if np.all(wh == wh[0]): 
+    if np.all(wh == wh[0]):
         out['size'] = wh[0]
         out['page_count'] = len(wh)
     else:
@@ -551,6 +553,8 @@ def _page_size_stats(wh) -> dict:
             excluded = 0
             while excluded < 0.5: # at least 50%
                 std = np.std(wh, axis=0)
+                if np.any(std == 0):
+                    break
                 mask = np.abs(wh - np.mean(wh, axis=0))/std < z_treshold
                 mask = mask[:, 0] & mask[:, 1]
                 excluded = np.sum(mask) / len(mask)
@@ -558,8 +562,6 @@ def _page_size_stats(wh) -> dict:
                 out['mean'] = np.mean(wh[mask], axis=0)
                 std = np.std(wh[mask], axis=0)
         out['size_diff'] = np.abs(out['size']  - out['mean'])
-        out['size_std'] = out['size_diff']/std
-
     return out
 
 def _getmeanpage(reader: PdfReader) -> Tuple[FloatType, FloatType]:
