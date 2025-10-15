@@ -43,8 +43,8 @@ class Group(SceneItem):
 
     node_id: CrdtId
     children: CrdtSequence[SceneItem] = field(default_factory=CrdtSequence)
-    label: LwwValue[str] = LwwValue(CrdtId(0, 0), "")
-    visible: LwwValue[bool] = LwwValue(CrdtId(0, 0), True)
+    label: LwwValue[str] = field(default_factory=lambda: LwwValue(CrdtId(0, 0), ""))
+    visible: LwwValue[bool] = field(default_factory=lambda: LwwValue(CrdtId(0, 0), True))
 
     anchor_id: tp.Optional[LwwValue[CrdtId]] = None
     anchor_type: tp.Optional[LwwValue[int]] = None
